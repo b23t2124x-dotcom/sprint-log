@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://archive-api.open-meteo.com https://geocoding-api.open-meteo.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#1c5bc9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="練習日誌">
+<title>スプリント練習日誌</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1><span class="lanes" aria-hidden="true"><i></i><i></i><i></i></span>スプリント練習日誌</h1>
+  <span id="storePill" class="pill warn">この端末に保存</span>
+</header>
+
+<main>
+<!-- ================= 日記 ================= -->
+<section class="view" id="v-diary">
+  <div class="card">
+    <h2 id="formTitle">今日の練習</h2>
+    <div class="row">
+      <label class="f grow">日付<input type="date" id="fDate"></label>
+      <label class="f w-time">練習した時刻<input type="time" id="fTime" step="3600"></label>
+    </div>
+    <div class="chips" id="fType" role="group" aria-label="練習の種類"></div>
+  </div>
+
+  <div class="card">
+    <h2>メニュー<small>距離を選んで本数とタイムを入れる</small></h2>
+    <div class="chips" id="mDist" role="group" aria-label="距離"></div>
+    <div class="row">
+      <label class="f w-s">距離 (m)<input class="num" id="mDistIn" inputmode="numeric" value="150" maxlength="5"></label>
+      <div class="f">本数
+        <div class="stepper"><button type="button" data-step="reps" data-d="-1" aria-label="本数を減らす">−</button><span class="num" id="mReps">3</span><button type="button" data-step="reps" data-d="1" aria-label="本数を増やす">＋</button></div>
+      </div>
+      <div class="f">セット
+        <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="mSets">1</span><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+      </div>
+    </div>
+    <div class="row">
+      <label class="f w-s">レスト (分)<input class="num" id="mRest" inputmode="decimal" value="3" maxlength="5"></label>
+      <label class="f w-m" id="mSetRestWrap">セット間 (分)<input class="num" id="mSetRest" inputmode="decimal" value="8" maxlength="5"></label>
+      <div class="chips" id="mTiming" role="group" aria-label="計時">
+        <button type="button" class="chip" data-v="hand" aria-pressed="true">手動計時</button>
+        <button type="button" class="chip" data-v="elec" aria-pressed="false">電気計時</button>
+      </div>
+    </div>
+    <div class="times" id="mTimes"></div>
+    <label class="f">メモ（任意）<input id="mNote" maxlength="100" placeholder="例：スパイク、坂、ウォーク戻り"></label>
+    <div class="row">
+      <button type="button" class="btn primary grow" id="mAdd">メニューに追加</button>
+    </div>
+    <div id="menuList" class="stack"></div>
+  </div>
+
+  <div class="card">
+    <h2>天気とコンディション</h2>
+    <div class="row">
+      <button type="button" class="btn grow" id="wxBtn">天気を自動で取得</button>
+    </div>
+    <p class="hint" id="wxStatus">場所を設定すると、日付と時刻の天気を取得できます。</p>
+    <div class="chips" id="fWeather" role="group" aria-label="天気"></div>
+    <div class="row">
+      <label class="f w-s">気温 (℃)<input class="num" id="fTemp" inputmode="decimal" placeholder="—" maxlength="5"></label>
+      <label class="f grow">風・グラウンド<input id="fWind" maxlength="80" placeholder="例：北風 3.0m/s、走路ぬれ"></label>
+    </div>
+    <div class="row">
+      <label class="f grow">きつさ RPE <span class="num rpe" id="fRpeV">6</span><input type="range" id="fRpe" min="1" max="10" value="6"></label>
+    </div>
+    <div class="chips" id="fCond" role="group" aria-label="調子"></div>
+  </div>
+
+  <div class="card">
+    <h2>日記</h2>
+    <textarea id="fBody" maxlength="5000" placeholder="気づいたこと、動きの感覚、次の課題など"></textarea>
+  </div>
+
+  <div class="card">
+    <h2>投稿する文<small>自動で作られます。直接書き換えもできます</small></h2>
+    <div class="chips" id="pOpts" role="group" aria-label="投稿に入れるもの">
+      <button type="button" class="chip" data-k="menu" aria-pressed="true">メニュー</button>
+      <button type="button" class="chip" data-k="body" aria-pressed="true">日記</button>
+      <button type="button" class="chip" data-k="cond" aria-pressed="false">調子・天気</button>
+      <button type="button" class="chip" data-k="tags" aria-pressed="true">ハッシュタグ</button>
+    </div>
+    <label class="f">ハッシュタグ<input id="pTags" value="#陸上 #短距離" maxlength="100"></label>
+    <textarea id="pText" class="tall" maxlength="5000"></textarea>
+    <div class="row between">
+      <span class="counter num" id="pCount">0 / 280</span>
+      <button type="button" class="btn small" id="pReset" hidden>自動の文に戻す</button>
+    </div>
+    <div class="row">
+      <button type="button" class="btn primary grow" id="saveBtn">保存</button>
+      <a class="btn x grow" id="xBtn" href="https://x.com/intent/post" target="_blank" rel="noopener noreferrer">保存してXでポスト</a>
+    </div>
+    <div class="row">
+      <button type="button" class="btn small" id="copyBtn">文をコピー</button>
+      <button type="button" class="btn small" id="newBtn">新しく書く</button>
+    </div>
+    <p class="hint">Xの投稿画面が文の入った状態で開きます。投稿ボタンはX側で押してください。日本語は1文字2カウントで、280カウント（約140字）までです。</p>
+  </div>
+</section>
+
+<!-- ================= 記録 ================= -->
+<section class="view" id="v-log">
+  <div class="card" id="backupWarn" hidden>
+    <h2>バックアップをおすすめします</h2>
+    <p class="hint" id="backupWarnText"></p>
+    <div class="row"><button type="button" class="btn primary grow" id="exportBtn2">今すぐ書き出す</button></div>
+  </div>
+  <div class="card">
+    <h2>まとめ</h2>
+    <div class="stats">
+      <div class="stat"><div class="v num" id="sWeek">0</div><div class="k">今週の練習日</div></div>
+      <div class="stat"><div class="v num" id="sDist">0</div><div class="k">今週の走行距離 (m)</div></div>
+      <div class="stat"><div class="v num" id="sTotal">0</div><div class="k">記録した日数</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>距離別ベスト<small>練習・試合で入れたタイムから</small></h2>
+    <div class="tablewrap"><table id="bestTable"><thead><tr><th>距離</th><th>電気計時</th><th>手動計時</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint" id="bestEmpty">タイムを入れて保存すると、ここに距離ごとのベストが出ます。</p>
+  </div>
+  <div class="card">
+    <h2>日記一覧</h2>
+    <div id="entryList" class="stack gap12"></div>
+  </div>
+  <div class="card">
+    <h2>設定とバックアップ</h2>
+    <h3>天気を取る場所</h3>
+    <p class="hint" id="locNow">未設定</p>
+    <div class="row">
+      <button type="button" class="btn grow" id="geoBtn">現在地を使う</button>
+    </div>
+    <div class="row">
+      <label class="f grow">地名で探す<input id="locQ" maxlength="40" placeholder="例：鳥取市"></label>
+      <button type="button" class="btn self-end" id="locSearch">検索</button>
+    </div>
+    <div id="locResults" class="stack"></div>
+    <p class="hint">位置は約1kmの精度に丸めてこの端末にだけ保存し、天気の取得のときだけOpen-Meteoに送ります。</p>
+    <h3>バックアップ</h3>
+    <p class="hint">記録はこの端末のブラウザの中にだけ保存されます。機種変更や、ほかの端末で使うときは、書き出したファイルを読み込んでください。</p>
+    <div class="row">
+      <button type="button" class="btn primary grow" id="exportBtn">ファイルに書き出す</button>
+      <label class="btn grow" for="importFile">ファイルを読み込む</label>
+      <input type="file" id="importFile" accept="application/json,.json" class="visually-hidden">
+    </div>
+    <p class="hint" id="lastBackup"></p>
+  </div>
+</section>
+
+<!-- ================= 換算 ================= -->
+<section class="view" id="v-convert">
+  <div class="card">
+    <h2>距離間のタイム換算</h2>
+    <div class="row">
+      <label class="f w-sel">距離<select class="num" id="cDist"></select></label>
+      <label class="f grow">タイム<input class="num" id="cTime" inputmode="decimal" value="11.20" maxlength="8"></label>
+    </div>
+    <div class="chips" id="cTiming" role="group" aria-label="計時">
+      <button type="button" class="chip" data-v="elec" aria-pressed="true">電気計時</button>
+      <button type="button" class="chip" data-v="hand" aria-pressed="false">手動計時</button>
+    </div>
+    <div class="row" id="cHandRow" hidden>
+      <label class="f w-m">手動→電計の加算 (秒)<input class="num" id="cOffset" inputmode="decimal" value="0.24" maxlength="5"></label>
+      <p class="hint grow">一般に100m・200mは+0.24秒、400mは+0.14秒がよく使われます。</p>
+    </div>
+    <div class="result" id="cHandResult" hidden></div>
+    <div class="tablewrap"><table id="cTable"><thead><tr><th>距離</th><th>相当タイム</th><th>平均速度</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint" id="cNote"></p>
+    <p class="hint">換算表の出典：<a class="src" href="https://unattachedrunner.com/time-correlation-sprint-detail/" target="_blank" rel="noopener noreferrer">unattachedrunner.com「タイム換算表（スプリント）」</a>。表の行のあいだは直線で補間しています。</p>
+  </div>
+</section>
+
+<!-- ================= 風 ================= -->
+<section class="view" id="v-wind">
+  <div class="card">
+    <h2>風の換算</h2>
+    <div class="chips" id="wEvent" role="group" aria-label="種目">
+      <button type="button" class="chip num" data-v="100" aria-pressed="true">100m</button>
+      <button type="button" class="chip num" data-v="200" aria-pressed="false">200m</button>
+    </div>
+    <div class="chips" id="wMode" role="group" aria-label="換算の向き">
+      <button type="button" class="chip" data-v="to0" aria-pressed="true">風ありの記録 → 無風</button>
+      <button type="button" class="chip" data-v="from0" aria-pressed="false">無風 → 風あり</button>
+    </div>
+    <div class="row">
+      <label class="f grow"><span id="wTimeLabel">記録</span><input class="num" id="wTime" inputmode="decimal" value="11.20" maxlength="8"></label>
+      <label class="f grow">風速 (m/s、追い風が＋)<input class="num" id="wWind" inputmode="decimal" value="+1.8" maxlength="5"></label>
+    </div>
+    <div class="chips" id="wQuick" role="group" aria-label="風速をすぐ選ぶ"></div>
+    <details>
+      <summary>標高（高地の競技場のとき）</summary>
+      <label class="f w-m mt8">標高 (m)<input class="num" id="wAlt" inputmode="numeric" value="0" maxlength="5"></label>
+    </details>
+    <div class="result" id="wResult"></div>
+    <div class="tablewrap"><table id="wTable"><thead><tr><th>風速</th><th>同じ走りのタイム</th><th>差</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint" id="wNote"></p>
+  </div>
+</section>
+
+<!-- ================= 設定タイム ================= -->
+<section class="view" id="v-pace">
+  <div class="card">
+    <h2>設定タイム計算</h2>
+    <p class="hint">基準の記録（自己ベストなど）から、練習する距離の目標タイムを強度別に出します。強度は速度の割合です。</p>
+    <div class="row">
+      <label class="f w-sel">基準の距離<select class="num" id="pBaseDist"></select></label>
+      <label class="f grow">基準タイム（電計）<input class="num" id="pBaseTime" inputmode="decimal" value="11.20" maxlength="8"></label>
+    </div>
+    <div class="row">
+      <label class="f w-sel">練習する距離<select class="num" id="pDist"></select></label>
+      <label class="f w-s">強度 (%)<input class="num" id="pPct" inputmode="decimal" value="90" maxlength="5"></label>
+    </div>
+    <div class="chips" id="pTiming" role="group" aria-label="練習の計時">
+      <button type="button" class="chip" data-v="hand" aria-pressed="true">練習は手動計時で測る</button>
+      <button type="button" class="chip" data-v="elec" aria-pressed="false">電気計時のまま</button>
+    </div>
+    <div class="result" id="pResult"></div>
+    <div class="tablewrap"><table id="pTable"><thead><tr><th>強度</th><th>目標タイム</th><th>平均速度</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint" id="pNote"></p>
+  </div>
+</section>
+</main>
+
+<nav class="tabs" aria-label="画面の切り替え">
+  <a href="#diary" data-v="diary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>日記</a>
+  <a href="#log" data-v="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 5h14M5 10h14M5 15h9M5 20h6"/></svg>記録</a>
+  <a href="#convert" data-v="convert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>換算</a>
+  <a href="#wind" data-v="wind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/></svg>風</a>
+  <a href="#pace" data-v="pace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4"/></svg>設定タイム</a>
+</nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="table.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
