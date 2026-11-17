@@ -147,7 +147,11 @@ function sanitizeEntry(e) {
     if (dist == null) return null;
     const reps = numIn(m.reps, 1, 20) || 1, sets = numIn(m.sets, 1, 6) || 1;
     const times = Array.isArray(m.times) ? m.times.slice(0, 120).map((t) => numIn(t, 0.01, 36000)) : [];
-    return { dist, reps: Math.round(reps), sets: Math.round(sets), rest: str(m.rest, 6), setRest: str(m.setRest, 6), timing: m.timing === "elec" ? "elec" : "hand", times, note: str(m.note, 100) };
+    return { dist, reps: Math.round(reps), sets: Math.round(sets), rest: str(m.rest, 8), setRest: str(m.setRest, 8), timing: m.timing === "elec" ? "elec" : "hand", times, note: str(m.note, 100) };
+  }).filter(Boolean) : [];
+  const weights = Array.isArray(e.weights) ? e.weights.slice(0, 30).map((g) => {
+    if (!g || typeof g !== "object" || !str(g.name, 30)) return null;
+    return { name: str(g.name, 30), kg: str(g.kg, 30), reps: Math.round(numIn(g.reps, 1, 100) || 1), sets: Math.round(numIn(g.sets, 1, 20) || 1), note: str(g.note, 60) };
   }).filter(Boolean) : [];
   let wx = null;
   if (e.wx && typeof e.wx === "object") {
@@ -156,7 +160,7 @@ function sanitizeEntry(e) {
   return {
     id: e.id, date: e.date, time: typeof e.time === "string" && /^\d{2}:\d{2}$/.test(e.time) ? e.time : "",
     types: Array.isArray(e.types) ? e.types.filter((t) => TYPES.includes(t)) : [],
-    menu, weather: WEATHER.includes(e.weather) ? e.weather : "",
+    menu, weights, weather: WEATHER.includes(e.weather) ? e.weather : "",
     temp: str(e.temp, 6), wind: str(e.wind, 80), windAuto: e.windAuto === true, wx,
     rpe: numIn(e.rpe, 1, 10) || 6, cond: COND.some(([k]) => k === e.cond) ? e.cond : "",
     body: str(e.body, 5000), post: str(e.post, 5000), postManual: e.postManual === true,
@@ -213,7 +217,7 @@ async function getJSON(url) {
   const timer = setTimeout(() => ctl.abort(), 10000);
   try {
     const r = await fetch(url, { signal: ctl.signal, credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store" });
-    if (!r.ok) throw new Error("http " + r.status);
+    if (!r.ok) { const e = new Error("http"); e.status = r.status; throw e; }
     return await r.json();
   } finally { clearTimeout(timer); }
 }
@@ -274,7 +278,7 @@ function renderWxStatus() {
 }
 async function doWeather(silent) {
   const loc = getLoc();
-  if (!loc) { if (!silent) { toast("先に場所を設定してください"); location.hash = "log"; setTimeout(() => $("#geoBtn").scrollIntoView({ block: "center" }), 50); } return false; }
+  if (!loc) { if (!silent) { $("#locBox").open = true; $("#wxStatus").textContent = "先に、下の「天気を取る場所」を設定してください。"; $("#locBox").scrollIntoView({ block: "center" }); } return false; }
   readForm();
   const btn = $("#wxBtn");
   btn.disabled = true; btn.textContent = "取得中…";
@@ -284,11 +288,15 @@ async function doWeather(silent) {
     if (!silent) toast("天気を取得しました");
     return true;
   } catch (e) {
-    const m = e && e.message === "future" ? "その日付の天気はまだ取得できません" :
+    const m = e && e.message === "future" ? "その日付の天気はまだ取得できません（予報は2週間先まで）" :
       e && e.message === "nodata" ? "その日時の天気データがありませんでした" :
-      e && e.name === "AbortError" ? "天気の取得に時間がかかりすぎました。電波の良い所で試してください" :
-      "天気を取得できませんでした。通信状態を確認してください";
-    if (!silent) toast(m);
+      e && e.message === "format" ? "天気サービスから予想と違う返事が来ました（format）" :
+      e && e.message === "http" ? "天気サービスがエラーを返しました（HTTP " + e.status + "）。少し時間をおいて試してください" :
+      e && e.name === "AbortError" ? "天気の取得に時間がかかりすぎました（10秒）。電波の良い所で試してください" :
+      e && e.name === "TypeError" ? "天気サービス（api.open-meteo.com）につながりませんでした。圏外か、広告ブロッカーやコンテンツブロッカーで止められている可能性があります（" + String(e.message).slice(0, 60) + "）" :
+      "天気を取得できませんでした（" + String(e && e.message).slice(0, 60) + "）";
+    // 失敗の理由は消えないように画面に残す
+    if (!silent) { toast("天気を取得できませんでした"); $("#wxStatus").textContent = m; }
     return false;
   } finally { btn.disabled = false; btn.textContent = "天気を自動で取得"; }
 }
@@ -301,7 +309,7 @@ function newId() {
   return "e" + Date.now().toString(36) + a[0].toString(36) + a[1].toString(36);
 }
 function blankEntry() {
-  return { id: newId(), date: todayStr(), time: nowHourStr(), types: ["スプリント"], menu: [], weather: "", temp: "", wind: "", windAuto: false, wx: null, rpe: 6, cond: "", body: "", post: "", postManual: false, createdAt: Date.now(), updatedAt: 0 };
+  return { id: newId(), date: todayStr(), time: nowHourStr(), types: ["スプリント"], menu: [], weights: [], weather: "", temp: "", wind: "", windAuto: false, wx: null, rpe: 6, cond: "", body: "", post: "", postManual: false, createdAt: Date.now(), updatedAt: 0 };
 }
 const M = { dist: 150, reps: 3, sets: 1, timing: "hand" };
 
@@ -314,6 +322,7 @@ function buildDiary() {
     const v = b.dataset.v, i = F.types.indexOf(v);
     if (i >= 0) F.types.splice(i, 1); else F.types.push(v);
     b.setAttribute("aria-pressed", i >= 0 ? "false" : "true");
+    syncWeightCard();
     updatePost();
   });
   const fw = $("#fWeather");
@@ -405,15 +414,18 @@ function addMenu() {
   const dist = Number(toHalf($("#mDistIn").value));
   if (!(dist > 0 && dist <= 50000)) { toast("距離を入れてください"); return; }
   const times = $$("#mTimes input").map((i) => { const v = parseTime(i.value); return isFinite(v) ? Math.round(v * 100) / 100 : null; });
-  F.menu.push({ dist, reps: M.reps, sets: M.sets, rest: toHalf($("#mRest").value).trim().slice(0, 6), setRest: M.sets > 1 ? toHalf($("#mSetRest").value).trim().slice(0, 6) : "", timing: M.timing, times, note: $("#mNote").value.trim().slice(0, 100) });
+  F.menu.push({ dist, reps: M.reps, sets: M.sets, rest: toHalf($("#mRest").value).trim().slice(0, 8), setRest: M.sets > 1 ? toHalf($("#mSetRest").value).trim().slice(0, 8) : "", timing: M.timing, times, note: $("#mNote").value.trim().slice(0, 100) });
   $$("#mTimes input").forEach((i) => { i.value = ""; });
   $("#mNote").value = "";
   renderMenuList();
   updatePost();
 }
+// 数字だけなら「分」を付ける。90秒 や 90" のように書いたものはそのまま
+function restStr(v) { return /^\d+(\.\d+)?$/.test(v) ? v + "分" : v; }
 function menuLine(m) {
   let s = `${m.dist}m×${m.reps}${m.sets > 1 ? "×" + m.sets : ""}`;
-  const rest = [m.rest ? "R" + m.rest + "分" : "", m.setRest ? "SR" + m.setRest + "分" : ""].filter(Boolean).join("/");
+  // 本数間は r、セット間は R
+  const rest = [m.rest ? "r" + restStr(m.rest) : "", m.setRest ? "R" + restStr(m.setRest) : ""].filter(Boolean).join("/");
   if (rest) s += `（${rest}）`;
   const ts = (m.times || []).filter((t) => t != null);
   if (ts.length) {
@@ -454,6 +466,8 @@ function loadForm(e) {
   setChip($("#fCond"), F.cond);
   $("#formTitle").textContent = S.entries.some((x) => x.id === F.id) ? "練習を編集" : "今日の練習";
   renderMenuList();
+  renderWeightList();
+  syncWeightCard();
   renderWxStatus();
   updatePost();
 }
@@ -463,6 +477,7 @@ function autoPost() {
   const wd = "日月火水木金土"[d.getDay()];
   const L = [`${d.getMonth() + 1}/${d.getDate()}(${wd}) 練習${F.types.length ? "【" + F.types.join("・") + "】" : ""}`];
   if (opt("menu") && F.menu.length) L.push(F.menu.map(menuLine).join("\n"));
+  if (opt("menu") && F.weights.length) L.push(F.weights.map(weightLine).join("\n"));
   if (opt("cond")) {
     const c = [F.weather, F.temp ? F.temp + "℃" : "", F.wind, F.cond ? "調子" + F.cond : "", F.rpe ? "RPE" + F.rpe : ""].filter(Boolean).join(" ");
     if (c) L.push(c);
@@ -485,6 +500,114 @@ function updateCount() {
 }
 function xUrl(text) { return "https://x.com/intent/post?text=" + encodeURIComponent(text); }
 function updateXLink() { $("#xBtn").href = xUrl($("#pText").value); }
+
+/* ---------- ウエイト ---------- */
+const WEIGHT_EX = ["スクワット", "ハーフスクワット", "デッドリフト", "ベンチプレス", "クリーン", "スナッチ", "ランジ", "ヒップスラスト", "ステップアップ", "カーフレイズ", "懸垂", "その他"];
+const G = { reps: 5, sets: 3 };
+function syncWeightCard() { $("#weightCard").hidden = !(F.types.includes("ウエイト") || F.weights.length); }
+function weightLine(g) {
+  const kg = g.kg ? (/^[\d.]+$/.test(g.kg) ? g.kg + "kg" : g.kg + (/kg$/i.test(g.kg) ? "" : "kg")) : "";
+  return `${g.name}${kg ? " " + kg : ""}×${g.reps}×${g.sets}${g.note ? " " + g.note : ""}`;
+}
+function buildWeight() {
+  const ex = $("#gEx");
+  ex.innerHTML = WEIGHT_EX.map((t) => `<button type="button" class="chip" data-v="${esc(t)}" aria-pressed="${t === "スクワット"}">${esc(t)}</button>`).join("");
+  chipGroup(ex, (v) => { $("#gName").value = v === "その他" ? "" : v; if (v === "その他") $("#gName").focus(); });
+  $$("[data-gstep]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.gstep;
+    G[k] = Math.max(1, Math.min(k === "reps" ? 100 : 20, G[k] + Number(b.dataset.d)));
+    $("#gReps").textContent = G.reps; $("#gSets").textContent = G.sets;
+  }));
+  $("#gAdd").addEventListener("click", () => {
+    const name = $("#gName").value.trim().slice(0, 30);
+    if (!name) { toast("種目名を入れてください"); return; }
+    F.weights.push({ name, kg: toHalf($("#gKg").value).trim().replace(/\s+/g, "").slice(0, 30), reps: G.reps, sets: G.sets, note: $("#gNote").value.trim().slice(0, 60) });
+    $("#gKg").value = ""; $("#gNote").value = "";
+    renderWeightList(); updatePost();
+  });
+}
+function renderWeightList() {
+  $("#weightList").innerHTML = F.weights.map((g, i) => `<div class="menuitem"><span class="t num">${esc(weightLine(g))}</span><button type="button" class="btn small" data-gi="${i}" data-act="up" aria-label="上へ" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" class="btn small danger" data-gi="${i}" data-act="del">削除</button></div>`).join("") || `<p class="hint">追加したウエイトがここに並びます。</p>`;
+  $$("#weightList [data-gi]").forEach((b) => b.addEventListener("click", () => {
+    const i = Number(b.dataset.gi);
+    if (b.dataset.act === "del") F.weights.splice(i, 1);
+    else if (i > 0) { const t = F.weights[i - 1]; F.weights[i - 1] = F.weights[i]; F.weights[i] = t; }
+    renderWeightList(); syncWeightCard(); updatePost();
+  }));
+}
+
+/* ---------- 自己記録（PB・SB） ---------- */
+const LS_REC = "sprintlog.records.v1";
+const REC_EVENTS = [60, 100, 150, 200, 300, 400];
+const R = { list: [], timing: "elec", pending: null };
+function sanitizeRec(r) {
+  if (!r || typeof r !== "object") return null;
+  if (typeof r.id !== "string" || !/^r[a-z0-9]{4,40}$/.test(r.id)) return null;
+  const dist = numIn(r.dist, 1, 50000), time = numIn(r.time, 0.01, 36000);
+  if (dist == null || time == null) return null;
+  if (typeof r.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return null;
+  return { id: r.id, dist: Math.round(dist), time, wind: numIn(r.wind, -20, 20), timing: r.timing === "hand" ? "hand" : "elec", date: r.date, meet: str(r.meet, 60) };
+}
+function loadRecs() { const raw = lsGet(LS_REC, []); R.list = Array.isArray(raw) ? raw.map(sanitizeRec).filter(Boolean) : []; }
+function saveRecs() { if (!lsSet(LS_REC, R.list)) toast("保存できませんでした。端末の空き容量を確認してください"); }
+function windAffected(d) { return d <= 200; }
+// 公認として扱える記録か（電気計時、かつ100m・200mなどは追い風2.0以下。風速未入力は公認扱い）
+function isLegal(r) { return r.timing === "elec" && !(windAffected(r.dist) && r.wind != null && r.wind > 2.0); }
+function recLabel(r, dp) {
+  const w = windAffected(r.dist) && r.wind != null ? `（${fmtWind(r.wind)}）` : "";
+  return fmt(r.time, r.timing === "hand" ? 1 : dp) + (r.timing === "hand" ? "（手）" : "") + w;
+}
+function buildRecords() {
+  loadRecs();
+  const ev = $("#rEvent");
+  ev.innerHTML = REC_EVENTS.map((d) => `<button type="button" class="chip num" data-v="${d}" aria-pressed="${d === 100}">${d}m</button>`).join("");
+  chipGroup(ev, (v) => { $("#rDist").value = v; syncRecWind(); });
+  $("#rDist").addEventListener("input", () => { setChip(ev, Number(toHalf($("#rDist").value))); syncRecWind(); });
+  chipGroup($("#rTiming"), (v) => { R.timing = v; });
+  $("#rDate").value = todayStr();
+  $("#sbYear").textContent = new Date().getFullYear();
+  $("#rAdd").addEventListener("click", () => {
+    const dist = Number(toHalf($("#rDist").value)), time = parseTime($("#rTime").value);
+    if (!(dist > 0 && dist <= 50000)) { toast("距離を入れてください"); return; }
+    if (!isFinite(time)) { toast("タイムを入れてください（例：11.20）"); return; }
+    const ws = $("#rWind").value.trim();
+    const wind = ws ? parseWind(ws) : null;
+    if (ws && (!isFinite(wind) || Math.abs(wind) > 20)) { toast("風速は +1.2 や -0.5 のように入れてください"); return; }
+    const a = new Uint32Array(2); crypto.getRandomValues(a);
+    const rec = sanitizeRec({ id: "r" + Date.now().toString(36) + a[0].toString(36) + a[1].toString(36), dist, time: Math.round(time * 100) / 100, wind, timing: R.timing, date: $("#rDate").value || todayStr(), meet: $("#rMeet").value.trim() });
+    if (!rec) { toast("記録を追加できませんでした"); return; }
+    const before = pbOf(dist);
+    R.list.push(rec); saveRecs();
+    $("#rTime").value = ""; $("#rWind").value = ""; $("#rMeet").value = "";
+    renderRecords();
+    const after = pbOf(dist);
+    toast(after && after.id === rec.id && (!before || before.time > rec.time) ? "PB更新！ おめでとうございます" : "記録を追加しました");
+  });
+  syncRecWind();
+}
+function syncRecWind() { const d = Number(toHalf($("#rDist").value)); $("#rWind").disabled = !(d > 0 && windAffected(d)); if ($("#rWind").disabled) $("#rWind").value = ""; }
+function bestOf(list) { return list.reduce((b, r) => (!b || r.time < b.time ? r : b), null); }
+function pbOf(d, year) { return bestOf(R.list.filter((r) => r.dist === d && isLegal(r) && (!year || r.date.startsWith(year + "-")))); }
+function renderRecords() {
+  const year = String(new Date().getFullYear());
+  const ds = Array.from(new Set(R.list.map((r) => r.dist))).sort((a, b) => a - b);
+  $("#pbTable tbody").innerHTML = ds.map((d) => {
+    const pb = pbOf(d), sb = pbOf(d, year);
+    const ref = bestOf(R.list.filter((r) => r.dist === d && !isLegal(r)));
+    const refHtml = ref && (!pb || ref.time < pb.time) ? `<br><span class="hint">参考 ${esc(recLabel(ref, 2))}</span>` : "";
+    const cell = (r) => (r ? `<span class="num lg${r === pb ? " pbmark" : ""}">${esc(fmt(r.time))}</span><br><span class="hint">${esc(r.date.replace(/-/g, "/"))}${windAffected(d) && r.wind != null ? " " + fmtWind(r.wind) : ""}</span>` : "—");
+    return `<tr><td class="num">${d}m</td><td>${cell(pb)}${refHtml}</td><td>${cell(sb)}</td></tr>`;
+  }).join("");
+  $("#pbEmpty").hidden = ds.length > 0;
+  $("#pbTable").hidden = ds.length === 0;
+  const rs = R.list.slice().sort((a, b) => b.date.localeCompare(a.date));
+  $("#recList").innerHTML = rs.length ? `<h3>入れた記録</h3>` + rs.map((r) => `<div class="menuitem"><span class="t"><span class="num lg">${r.dist}m ${esc(recLabel(r, 2))}</span><br><span class="hint">${esc(r.date.replace(/-/g, "/"))}${r.meet ? "　" + esc(r.meet) : ""}${isLegal(r) ? "" : "　PB・SBの対象外"}</span></span><button type="button" class="btn small danger" data-rdel="${esc(r.id)}">${R.pending === r.id ? "本当に削除する" : "削除"}</button></div>`).join("") : "";
+  $$("[data-rdel]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.rdel;
+    if (R.pending === id) { R.pending = null; R.list = R.list.filter((x) => x.id !== id); saveRecs(); renderRecords(); toast("削除しました"); }
+    else { R.pending = id; renderRecords(); setTimeout(() => { if (R.pending === id) { R.pending = null; renderRecords(); } }, 4000); }
+  }));
+}
 
 /* ---------- 記録一覧 ---------- */
 let pendingDel = null;
@@ -516,6 +639,7 @@ function renderLog() {
     const meta = [e.wx ? wxText(e.wx) : [e.weather, e.temp ? e.temp + "℃" : "", e.wind].filter(Boolean).join(" "), e.cond ? "調子" + e.cond : "", "RPE " + e.rpe].filter(Boolean).join("　");
     return `<div class="entry"><div class="head"><span class="date">${d.getMonth() + 1}/${d.getDate()}</span><span class="hint">${"日月火水木金土"[d.getDay()]}曜${e.time ? " " + esc(e.time) : ""}</span>${e.types.map((t) => `<span class="pill${t === "試合" ? " pb" : ""}">${esc(t)}</span>`).join("")}</div>
       ${e.menu.length ? `<div class="menu num">${e.menu.map((m) => esc(menuLine(m))).join("<br>")}</div>` : ""}
+      ${e.weights.length ? `<div class="menu num">${e.weights.map((g) => esc(weightLine(g))).join("<br>")}</div>` : ""}
       ${meta ? `<div class="hint">${esc(meta)}</div>` : ""}
       ${e.body ? `<div class="body">${esc(e.body)}</div>` : ""}
       <div class="row"><button type="button" class="btn small" data-edit="${esc(e.id)}">編集</button><a class="btn small" href="${esc(xUrl(e.post || ""))}" target="_blank" rel="noopener noreferrer">Xでポスト</a><button type="button" class="btn small danger" data-del="${esc(e.id)}">${pendingDel === e.id ? "本当に削除する" : "削除"}</button></div></div>`;
@@ -532,21 +656,22 @@ function renderLog() {
       setTimeout(() => { if (pendingDel === id) { pendingDel = null; renderLog(); } }, 4000);
     }
   }));
+  renderRecords();
   renderBackupInfo();
 }
 
 /* ---------- 場所の設定 ---------- */
 function renderLoc() {
   const l = getLoc();
-  $("#locNow").textContent = l ? "現在の設定：" + l.name + "（" + l.lat.toFixed(2) + ", " + l.lon.toFixed(2) + "）" : "未設定";
+  $("#locSummary").textContent = "天気を取る場所：" + (l ? l.name + "（" + l.lat.toFixed(2) + ", " + l.lon.toFixed(2) + "）・変更する" : "未設定（ここを押して設定）");
   if (F) renderWxStatus();
 }
 function buildLoc() {
   $("#geoBtn").addEventListener("click", () => {
     if (!navigator.geolocation) { toast("この端末では現在地を使えません。地名で探してください"); return; }
     navigator.geolocation.getCurrentPosition(
-      (p) => { setLoc(p.coords.latitude, p.coords.longitude, "現在地"); toast("場所を設定しました"); },
-      () => toast("現在地を取得できませんでした。地名で探してください"),
+      (p) => { setLoc(p.coords.latitude, p.coords.longitude, "現在地（" + new Date().toLocaleDateString("ja-JP") + "）"); $("#locBox").open = false; toast("場所を設定しました"); },
+      (err) => { $("#locResults").textContent = err && err.code === 1 ? "位置情報の使用が許可されていません。端末の設定でブラウザの位置情報を許可するか、地名で探してください。" : "現在地を取得できませんでした。地名で探してください。"; },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
     );
   });
@@ -556,17 +681,20 @@ function buildLoc() {
     const box = $("#locResults");
     box.textContent = "検索中…";
     try {
-      const j = await getJSON("https://geocoding-api.open-meteo.com/v1/search?" + new URLSearchParams({ name: q, count: "6", language: "ja", format: "json" }).toString());
-      const rs = (j && Array.isArray(j.results) ? j.results : []).filter((r) => numIn(r.latitude, -90, 90) != null && numIn(r.longitude, -180, 180) != null);
+      const j = await getJSON("https://geocoding-api.open-meteo.com/v1/search?" + new URLSearchParams({ name: q, count: "10", language: "ja", format: "json" }).toString());
+      // 同じ名前の地名が複数あるので、日本の候補を先に、人口の多い順に並べる
+      const rs = (j && Array.isArray(j.results) ? j.results : [])
+        .filter((r) => r && numIn(r.latitude, -90, 90) != null && numIn(r.longitude, -180, 180) != null)
+        .sort((a, b) => (b.country_code === "JP") - (a.country_code === "JP") || (numIn(b.population, 0, 1e10) || 0) - (numIn(a.population, 0, 1e10) || 0));
       box.textContent = "";
       if (!rs.length) { box.textContent = "見つかりませんでした。別の書き方で試してください（例：鳥取）"; return; }
       rs.forEach((r) => {
         // 外部からの文字列は textContent で入れる
         const b = document.createElement("button");
         b.type = "button"; b.className = "btn small locitem";
-        const name = [r.name, r.admin1, r.country].filter((x) => typeof x === "string" && x).join("・").slice(0, 60);
+        const name = [r.name, r.admin2, r.admin1, r.country_code === "JP" ? "" : r.country].filter((x) => typeof x === "string" && x).join("・").slice(0, 60);
         b.textContent = name;
-        b.addEventListener("click", () => { setLoc(r.latitude, r.longitude, String(r.name || name).slice(0, 60)); box.textContent = ""; toast("場所を設定しました"); });
+        b.addEventListener("click", () => { setLoc(r.latitude, r.longitude, String(r.name || name).slice(0, 60)); box.textContent = ""; $("#locBox").open = false; toast("場所を設定しました"); });
         box.appendChild(b);
       });
     } catch (e) { box.textContent = "検索できませんでした。通信状態を確認してください"; }
@@ -586,7 +714,7 @@ function renderBackupInfo() {
   if (warn) $("#backupWarnText").textContent = (days == null ? "まだ一度もバックアップしていません。" : "最後のバックアップから" + days + "日たっています。") + "ブラウザのデータが消えると記録も消えるので、ときどきファイルに書き出してください。";
 }
 function exportData() {
-  const data = { app: "sprint-log", version: 1, exportedAt: new Date().toISOString(), entries: S.entries };
+  const data = { app: "sprint-log", version: 2, exportedAt: new Date().toISOString(), entries: S.entries, records: R.list };
   const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -613,8 +741,13 @@ function importData(file) {
       else if ((e.updatedAt || 0) > (S.entries[i].updatedAt || 0)) { S.entries[i] = e; upd++; }
     });
     persist();
+    let radd = 0;
+    if (Array.isArray(j.records)) {
+      j.records.slice(0, 5000).map(sanitizeRec).filter(Boolean).forEach((r) => { if (!R.list.some((x) => x.id === r.id)) { R.list.push(r); radd++; } });
+      saveRecs();
+    }
     renderLog();
-    toast("読み込みました（新規 " + add + " 件・更新 " + upd + " 件）");
+    toast("読み込みました（日記 新規 " + add + " 件・更新 " + upd + " 件、試合記録 " + radd + " 件）");
   };
   rd.onerror = () => toast("ファイルを読めませんでした");
   rd.readAsText(file);
@@ -730,7 +863,7 @@ function route() {
 
 /* ---------- 起動 ---------- */
 loadEntries();
-buildDiary(); buildConvert(); buildWind(); buildPace(); buildLoc(); buildBackup();
+buildDiary(); buildWeight(); buildRecords(); buildConvert(); buildWind(); buildPace(); buildLoc(); buildBackup();
 loadForm(blankEntry());
 renderConvert(); renderWind(); renderPace(); renderLog();
 window.addEventListener("hashchange", route);

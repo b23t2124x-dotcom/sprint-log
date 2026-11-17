@@ -45,8 +45,8 @@
       </div>
     </div>
     <div class="row">
-      <label class="f w-s">レスト (分)<input class="num" id="mRest" inputmode="decimal" value="3" maxlength="5"></label>
-      <label class="f w-m" id="mSetRestWrap">セット間 (分)<input class="num" id="mSetRest" inputmode="decimal" value="8" maxlength="5"></label>
+      <label class="f w-m">r 本数間 (分)<input class="num" id="mRest" inputmode="decimal" value="3" maxlength="8"></label>
+      <label class="f w-m" id="mSetRestWrap">R セット間 (分)<input class="num" id="mSetRest" inputmode="decimal" value="8" maxlength="8"></label>
       <div class="chips" id="mTiming" role="group" aria-label="計時">
         <button type="button" class="chip" data-v="hand" aria-pressed="true">手動計時</button>
         <button type="button" class="chip" data-v="elec" aria-pressed="false">電気計時</button>
@@ -60,12 +60,46 @@
     <div id="menuList" class="stack"></div>
   </div>
 
+  <div class="card" id="weightCard" hidden>
+    <h2>ウエイト<small>種目を選んで重量・回数・セットを入れる</small></h2>
+    <div class="chips" id="gEx" role="group" aria-label="ウエイトの種目"></div>
+    <label class="f">種目名<input id="gName" maxlength="30" value="スクワット"></label>
+    <div class="row">
+      <label class="f w-m">重量 (kg)<input class="num" id="gKg" inputmode="decimal" maxlength="30" placeholder="例：100 / 80-90-100"></label>
+      <div class="f">回数
+        <div class="stepper"><button type="button" data-gstep="reps" data-d="-1" aria-label="回数を減らす">−</button><span class="num" id="gReps">5</span><button type="button" data-gstep="reps" data-d="1" aria-label="回数を増やす">＋</button></div>
+      </div>
+      <div class="f">セット
+        <div class="stepper"><button type="button" data-gstep="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="gSets">3</span><button type="button" data-gstep="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+      </div>
+    </div>
+    <label class="f">メモ（任意）<input id="gNote" maxlength="60" placeholder="例：RPE8、フォーム重視、片脚ずつ"></label>
+    <div class="row">
+      <button type="button" class="btn primary grow" id="gAdd">ウエイトを追加</button>
+    </div>
+    <div id="weightList" class="stack"></div>
+  </div>
+
   <div class="card">
     <h2>天気とコンディション</h2>
     <div class="row">
       <button type="button" class="btn grow" id="wxBtn">天気を自動で取得</button>
     </div>
     <p class="hint" id="wxStatus">場所を設定すると、日付と時刻の天気を取得できます。</p>
+    <details id="locBox">
+      <summary id="locSummary">天気を取る場所：未設定</summary>
+      <div class="stack mt8">
+        <div class="row">
+          <button type="button" class="btn grow" id="geoBtn">現在地を使う</button>
+        </div>
+        <div class="row">
+          <label class="f grow">地名で探す<input id="locQ" maxlength="40" placeholder="例：鳥取市"></label>
+          <button type="button" class="btn self-end" id="locSearch">検索</button>
+        </div>
+        <div id="locResults" class="stack"></div>
+        <p class="hint">位置は約1kmの精度に丸めてこの端末にだけ保存し、天気の取得のときだけOpen-Meteoに送ります。</p>
+      </div>
+    </details>
     <div class="chips" id="fWeather" role="group" aria-label="天気"></div>
     <div class="row">
       <label class="f w-s">気温 (℃)<input class="num" id="fTemp" inputmode="decimal" placeholder="—" maxlength="5"></label>
@@ -124,7 +158,34 @@
     </div>
   </div>
   <div class="card">
-    <h2>距離別ベスト<small>練習・試合で入れたタイムから</small></h2>
+    <h2>自己記録<small>PB・SB（<span id="sbYear"></span>年）</small></h2>
+    <div class="tablewrap"><table id="pbTable"><thead><tr><th>種目</th><th>PB</th><th>SB</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint" id="pbEmpty">試合の記録を下から入れると、種目ごとのPBとSBが出ます。</p>
+    <p class="hint">PB・SBは電気計時で、100m・200mは追い風2.0m/s以下の記録から選びます。追い風参考や手動計時の記録は、より速いときだけ参考として下に出します。</p>
+    <details id="recBox">
+      <summary>記録を追加する</summary>
+      <div class="stack mt8">
+        <div class="chips" id="rEvent" role="group" aria-label="種目"></div>
+        <div class="row">
+          <label class="f w-s">距離 (m)<input class="num" id="rDist" inputmode="numeric" value="100" maxlength="5"></label>
+          <label class="f grow">タイム<input class="num" id="rTime" inputmode="decimal" maxlength="8" placeholder="例：11.20 / 50.12 / 1:05.30"></label>
+        </div>
+        <div class="row">
+          <label class="f w-s">風速 (m/s)<input class="num" id="rWind" inputmode="decimal" maxlength="5" placeholder="例：+1.2"></label>
+          <label class="f grow">日付<input type="date" id="rDate"></label>
+        </div>
+        <div class="chips" id="rTiming" role="group" aria-label="計時">
+          <button type="button" class="chip" data-v="elec" aria-pressed="true">電気計時</button>
+          <button type="button" class="chip" data-v="hand" aria-pressed="false">手動計時</button>
+        </div>
+        <label class="f">大会名・メモ（任意）<input id="rMeet" maxlength="60" placeholder="例：県選手権 予選2組"></label>
+        <div class="row"><button type="button" class="btn primary grow" id="rAdd">記録を追加</button></div>
+      </div>
+    </details>
+    <div id="recList" class="stack"></div>
+  </div>
+  <div class="card">
+    <h2>練習ベスト<small>日記のメニューに入れたタイムから</small></h2>
     <div class="tablewrap"><table id="bestTable"><thead><tr><th>距離</th><th>電気計時</th><th>手動計時</th></tr></thead><tbody></tbody></table></div>
     <p class="hint" id="bestEmpty">タイムを入れて保存すると、ここに距離ごとのベストが出ます。</p>
   </div>
@@ -133,19 +194,7 @@
     <div id="entryList" class="stack gap12"></div>
   </div>
   <div class="card">
-    <h2>設定とバックアップ</h2>
-    <h3>天気を取る場所</h3>
-    <p class="hint" id="locNow">未設定</p>
-    <div class="row">
-      <button type="button" class="btn grow" id="geoBtn">現在地を使う</button>
-    </div>
-    <div class="row">
-      <label class="f grow">地名で探す<input id="locQ" maxlength="40" placeholder="例：鳥取市"></label>
-      <button type="button" class="btn self-end" id="locSearch">検索</button>
-    </div>
-    <div id="locResults" class="stack"></div>
-    <p class="hint">位置は約1kmの精度に丸めてこの端末にだけ保存し、天気の取得のときだけOpen-Meteoに送ります。</p>
-    <h3>バックアップ</h3>
+    <h2>バックアップ</h2>
     <p class="hint">記録はこの端末のブラウザの中にだけ保存されます。機種変更や、ほかの端末で使うときは、書き出したファイルを読み込んでください。</p>
     <div class="row">
       <button type="button" class="btn primary grow" id="exportBtn">ファイルに書き出す</button>

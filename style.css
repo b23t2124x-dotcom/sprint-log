@@ -110,3 +110,5 @@ nav.tabs a[aria-current="page"]{color:var(--accent);border-top-color:var(--accen
 details summary{cursor:pointer;font-size:13px;color:var(--muted)}
 a.src{color:var(--accent)}
 @media (prefers-reduced-motion: reduce){.toast{transition:none}}
+.pbmark{color:var(--pb)}
+input:disabled{opacity:.5}
