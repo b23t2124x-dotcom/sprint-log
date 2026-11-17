@@ -124,45 +124,91 @@ function xLen(s) {
   return n;
 }
 
+
 /* ---------- 保存（この端末の localStorage） ---------- */
 const LS_ENTRIES = "sprintlog.entries.v1";
 const LS_LOC = "sprintlog.location.v1";
 const LS_BACKUP = "sprintlog.lastBackup.v1";
 const LS_POST = "sprintlog.postprefs.v1";
+const LS_TPL = "sprintlog.template.v1";
 const S = { entries: [] };
 
-const TYPES = ["スプリント", "加速走", "テンポ走", "スタート練", "ウエイト", "試合", "休養", "その他"];
 const WEATHER = ["晴れ", "くもり", "雨", "雪", "室内"];
 const COND = [["◎", "絶好調"], ["○", "良い"], ["△", "いまいち"], ["×", "不調"]];
+const INTS = ["弱", "中", "強"];
+const MARKS = ["試合", "休養"];
+const FAT = { 1: "とても楽", 2: "楽", 3: "楽", 4: "ややきつい", 5: "きつい", 6: "きつい", 7: "かなりきつい", 8: "かなりきつい", 9: "ほぼ限界", 10: "限界" };
 const DISTS = [30, 50, 60, 80, 100, 120, 150, 200, 250, 300, 400];
+const KINDS = ["SD", "加速走", "流し", "テンポ走", "イーブン走", "セット走", "坂ダッシュ", "牽引走", "TT", "その他"];
+const LINKS = ["10秒", "20秒", "30秒", "1分", "ウォーク20m", "ウォーク50m", "ジョグ"];
+const RELAYS = ["4×100m", "4×400m", "その他"];
+const ROUNDS = ["予選", "準決勝", "決勝", "TR"];
+const RACE_EVENTS = ["60", "100", "200", "300", "400", "relay"];
+const OCATS = ["ジョグ", "ストレッチ", "ドリル", "補強", "プライオ・跳躍", "ケア"];
+const OCAT_POST_DEFAULT = { "ジョグ": false, "ストレッチ": false, "ケア": false, "ドリル": true, "補強": true, "プライオ・跳躍": true };
+const PLYO = ["バウンディング", "ホッピング", "片脚ホップ", "立ち幅跳び", "立ち五段跳び", "ボックスジャンプ", "メディシンボール投げ", "その他"];
+const WEIGHT_EX = ["スクワット", "ハーフスクワット", "デッドリフト", "ベンチプレス", "クリーン", "スナッチ", "ランジ", "ヒップスラスト", "ステップアップ", "カーフレイズ", "懸垂", "その他"];
 
-// 読み込んだデータ（端末に保存済みのものもバックアップファイルも）は必ずここを通して形と範囲をそろえる
+/* ---------- 読み込んだデータの検査（旧い形式からの移行も兼ねる） ---------- */
+function timeOrNull(t) { return numIn(t, 0.01, 36000); }
+function sanitizeRun(m) {
+  if (!m || typeof m !== "object") return null;
+  let segs = Array.isArray(m.segs) ? m.segs : (m.dist != null ? [m.dist] : []);
+  segs = segs.slice(0, 6).map((x) => numIn(x, 1, 50000)).filter((x) => x != null).map(Math.round);
+  if (!segs.length) return null;
+  const reps = Math.round(numIn(m.reps, 1, 20) || 1), sets = Math.round(numIn(m.sets, 1, 6) || 1);
+  const times = Array.isArray(m.times) ? m.times.slice(0, 120).map((t) =>
+    Array.isArray(t) ? segs.map((_, k) => timeOrNull(t[k])) : (segs.length === 1 ? [timeOrNull(t)] : segs.map(() => null))) : [];
+  return {
+    segs, reps, sets, times,
+    kind: KINDS.includes(m.kind) ? m.kind : "", kindName: str(m.kindName, 20), link: str(m.link, 30),
+    rest: str(m.rest, 8), setRest: str(m.setRest, 8), timing: m.timing === "elec" ? "elec" : "hand", note: str(m.note, 100),
+  };
+}
+function sanitizeWeight(g) {
+  if (!g || typeof g !== "object" || !str(g.name, 30)) return null;
+  return { name: str(g.name, 30), kg: str(g.kg, 30), reps: Math.round(numIn(g.reps, 1, 100) || 1), sets: Math.round(numIn(g.sets, 1, 20) || 1), note: str(g.note, 60) };
+}
+function sanitizeExtra(o) {
+  if (!o || typeof o !== "object" || !OCATS.includes(o.cat)) return null;
+  const sets = numIn(o.sets, 1, 20);
+  return { cat: o.cat, name: str(o.name, 30), amt: str(o.amt, 20), sets: sets ? Math.round(sets) : null, post: typeof o.post === "boolean" ? o.post : OCAT_POST_DEFAULT[o.cat] };
+}
+function sanitizeRace(x) {
+  if (!x || typeof x !== "object") return null;
+  const time = timeOrNull(x.time);
+  if (time == null) return null;
+  const relay = x.event === "relay";
+  const dist = relay ? null : numIn(x.dist, 1, 50000);
+  if (!relay && dist == null) return null;
+  const n = (v, lo, hi) => { const r = numIn(v, lo, hi); return r == null ? null : Math.round(r); };
+  return {
+    event: relay ? "relay" : "ind", dist: dist == null ? null : Math.round(dist), time,
+    wind: relay ? null : numIn(x.wind, -20, 20), timing: x.timing === "hand" ? "hand" : "elec",
+    round: ROUNDS.includes(x.round) ? x.round : "", place: n(x.place, 1, 999), heat: n(x.heat, 1, 999), lane: n(x.lane, 1, 20),
+    relayType: relay && RELAYS.includes(x.relayType) ? x.relayType : (relay ? "4×100m" : ""), relayName: relay ? str(x.relayName, 20) : "",
+    leg: relay ? n(x.leg, 1, 4) : null, split: relay ? timeOrNull(x.split) : null,
+  };
+}
 function sanitizeEntry(e) {
   if (!e || typeof e !== "object") return null;
   if (typeof e.id !== "string" || !/^e[a-z0-9]{4,40}$/.test(e.id)) return null;
   if (typeof e.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return null;
-  const menu = Array.isArray(e.menu) ? e.menu.slice(0, 50).map((m) => {
-    if (!m || typeof m !== "object") return null;
-    const dist = numIn(m.dist, 1, 50000);
-    if (dist == null) return null;
-    const reps = numIn(m.reps, 1, 20) || 1, sets = numIn(m.sets, 1, 6) || 1;
-    const times = Array.isArray(m.times) ? m.times.slice(0, 120).map((t) => numIn(t, 0.01, 36000)) : [];
-    return { dist, reps: Math.round(reps), sets: Math.round(sets), rest: str(m.rest, 8), setRest: str(m.setRest, 8), timing: m.timing === "elec" ? "elec" : "hand", times, note: str(m.note, 100) };
-  }).filter(Boolean) : [];
-  const weights = Array.isArray(e.weights) ? e.weights.slice(0, 30).map((g) => {
-    if (!g || typeof g !== "object" || !str(g.name, 30)) return null;
-    return { name: str(g.name, 30), kg: str(g.kg, 30), reps: Math.round(numIn(g.reps, 1, 100) || 1), sets: Math.round(numIn(g.sets, 1, 20) || 1), note: str(g.note, 60) };
-  }).filter(Boolean) : [];
+  const arr = (v, max, f) => (Array.isArray(v) ? v.slice(0, max).map(f).filter(Boolean) : []);
+  // 旧形式の types（試合・休養）を marks に移す
+  const marks = Array.isArray(e.marks) ? e.marks.filter((m) => MARKS.includes(m)) : (Array.isArray(e.types) ? e.types.filter((m) => MARKS.includes(m)) : []);
   let wx = null;
   if (e.wx && typeof e.wx === "object") {
     wx = { temp: numIn(e.wx.temp, -60, 60), hum: numIn(e.wx.hum, 0, 100), code: numIn(e.wx.code, 0, 99), ws: numIn(e.wx.ws, 0, 100), wd: numIn(e.wx.wd, 0, 360), at: str(e.wx.at, 16), place: str(e.wx.place, 60) };
   }
+  const fat = numIn(e.fatigue, 1, 10) || (e.fatigue === undefined ? numIn(e.rpe, 1, 10) : null);
   return {
     id: e.id, date: e.date, time: typeof e.time === "string" && /^\d{2}:\d{2}$/.test(e.time) ? e.time : "",
-    types: Array.isArray(e.types) ? e.types.filter((t) => TYPES.includes(t)) : [],
-    menu, weights, weather: WEATHER.includes(e.weather) ? e.weather : "",
-    temp: str(e.temp, 6), wind: str(e.wind, 80), windAuto: e.windAuto === true, wx,
-    rpe: numIn(e.rpe, 1, 10) || 6, cond: COND.some(([k]) => k === e.cond) ? e.cond : "",
+    marks: Array.from(new Set(marks)), intensity: INTS.includes(e.intensity) ? e.intensity : "",
+    meet: str(e.meet, 60), races: arr(e.races, 20, sanitizeRace),
+    menu: arr(e.menu, 50, sanitizeRun), weights: arr(e.weights, 30, sanitizeWeight), extras: arr(e.extras, 30, sanitizeExtra),
+    weather: WEATHER.includes(e.weather) ? e.weather : "", temp: str(e.temp, 6), wind: str(e.wind, 80), windAuto: e.windAuto === true, wx,
+    fatigue: fat ? Math.round(fat) : null, cond: COND.some(([k]) => k === e.cond) ? e.cond : "",
     body: str(e.body, 5000), post: str(e.post, 5000), postManual: e.postManual === true,
     createdAt: numIn(e.createdAt, 0, 1e14) || 0, updatedAt: numIn(e.updatedAt, 0, 1e14) || 0,
   };
@@ -186,6 +232,625 @@ function saveEntry(e) {
 }
 function deleteEntry(id) { S.entries = S.entries.filter((x) => x.id !== id); persist(); renderLog(); }
 
+/* ---------- 表示用の文 ---------- */
+function restStr(v) { return /^\d+(\.\d+)?$/.test(v) ? v + "分" : v; } // 数字だけなら「分」を付ける
+function segsStr(segs) { return segs.join("+"); }
+function menuKey(m) { return segsStr(m.segs) + "m"; }
+function kindLabel(m) { return m.kind === "その他" ? (m.kindName || "") : m.kind; }
+function menuLine(m) {
+  const k = kindLabel(m);
+  let s = (k ? k + " " : "") + (m.segs.length > 1 ? `(${segsStr(m.segs)})` : m.segs[0] + "m") + `×${m.reps}${m.sets > 1 ? "×" + m.sets : ""}`;
+  // つなぎ／本数間 r／セット間 R
+  const inner = [m.segs.length > 1 && m.link ? "つなぎ " + m.link : "", m.rest ? "r" + restStr(m.rest) : "", m.sets > 1 && m.setRest ? "R" + restStr(m.setRest) : ""].filter(Boolean).join("／");
+  if (inner) s += `（${inner}）`;
+  const dp = m.timing === "hand" ? 1 : 2;
+  const reps = m.times.map((rep) => (rep && rep.some((t) => t != null) ? rep.map((t) => (t == null ? "–" : fmt(t, dp))).join("+") : "–"));
+  while (reps.length && reps[reps.length - 1] === "–") reps.pop();
+  if (reps.length) s += " " + reps.join("/") + (m.timing === "hand" ? "（手）" : "");
+  if (m.note) s += " " + m.note;
+  return s;
+}
+function weightLine(g) {
+  const kg = g.kg ? (/^[\d.]+$/.test(g.kg) ? g.kg + "kg" : g.kg + (/kg$/i.test(g.kg) ? "" : "kg")) : "";
+  return `${g.name}${kg ? " " + kg : ""}×${g.reps}×${g.sets}${g.note ? " " + g.note : ""}`;
+}
+function extraLine(o) {
+  const head = o.cat === "プライオ・跳躍" ? (o.name || "プライオ") : o.cat + (o.name ? (o.cat === "補強" ? " " + o.name : "（" + o.name + "）") : "");
+  const amt = o.amt ? (o.sets && o.sets > 1 ? ` ${o.amt}×${o.sets}` : ` ${o.amt}`) : (o.sets && o.sets > 1 ? ` ×${o.sets}` : "");
+  return head + amt;
+}
+function raceName(x) { return x.event === "relay" ? (x.relayType === "その他" ? (x.relayName || "リレー") : x.relayType + "R") : x.dist + "m"; }
+function raceLine(x, mark) {
+  let s = raceName(x) + (x.round ? " " + x.round : "") + " " + fmt(x.time, x.timing === "hand" ? 1 : 2) + (x.timing === "hand" ? "（手）" : "");
+  if (x.event !== "relay" && windAffected(x.dist) && x.wind != null) s += `（${fmtWind(x.wind)}）`;
+  if (x.place) s += ` ${x.place}着`;
+  if (x.event === "relay" && (x.leg || x.split)) s += `（${x.leg ? x.leg + "走" : ""}${x.leg && x.split ? " " : ""}${x.split ? "区間" + fmt(x.split, x.timing === "hand" ? 1 : 2) : ""}）`;
+  const hl = [x.heat ? x.heat + "組" : "", x.lane ? x.lane + "レーン" : ""].filter(Boolean).join("");
+  if (hl) s += " " + hl;
+  if (mark) s += " " + mark;
+  return s;
+}
+// 見出し：中身から自動（ラン・ウエイト・その他）＋試合・休養
+function headTokens(e) {
+  const t = [];
+  e.marks.forEach((m) => t.push(m));
+  if (e.menu.length) t.push("ラン");
+  if (e.weights.length) t.push("ウエイト");
+  if (e.extras.length) t.push("その他");
+  return t;
+}
+function headLine(e) {
+  const d = new Date(e.date + "T00:00:00");
+  const t = headTokens(e);
+  const inner = t.join("・") + (e.intensity ? (t.length ? "／" : "") + e.intensity : "");
+  return `${d.getMonth() + 1}/${d.getDate()}(${"日月火水木金土"[d.getDay()]})${inner ? "【" + inner + "】" : ""}${e.marks.includes("試合") && e.meet ? " " + e.meet : ""}`;
+}
+
+/* ---------- 日記フォーム ---------- */
+let F = null; // 編集中の日記
+function newId(prefix) {
+  const a = new Uint32Array(2);
+  crypto.getRandomValues(a);
+  return prefix + Date.now().toString(36) + a[0].toString(36) + a[1].toString(36);
+}
+function blankEntry() {
+  return { id: newId("e"), date: todayStr(), time: nowHourStr(), marks: [], intensity: "", meet: "", races: [], menu: [], weights: [], extras: [], weather: "", temp: "", wind: "", windAuto: false, wx: null, fatigue: null, cond: "", body: "", post: "", postManual: false, createdAt: Date.now(), updatedAt: 0 };
+}
+function chipsHTML(list, pressed, cls) { return list.map((t) => `<button type="button" class="chip${cls ? " " + cls : ""}" data-v="${esc(t)}" aria-pressed="${t === pressed}">${esc(t)}</button>`).join(""); }
+function toggleChips(el, getter, setter) {
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (!b) return;
+    setter(getter() === b.dataset.v ? "" : b.dataset.v);
+  });
+}
+
+function buildDiary() {
+  // 強度・試合/休養
+  toggleChips($("#fInt"), () => F.intensity, (v) => { F.intensity = v; setChip($("#fInt"), v); updatePost(); });
+  $("#fMarks").addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (!b) return;
+    const v = b.dataset.v, i = F.marks.indexOf(v);
+    if (i >= 0) F.marks.splice(i, 1); else F.marks.push(v);
+    syncMarks();
+    updatePost();
+  });
+  // 天気・疲労・調子
+  const fw = $("#fWeather");
+  fw.innerHTML = chipsHTML(WEATHER, "");
+  toggleChips(fw, () => F.weather, (v) => { F.weather = v; setChip(fw, v); updatePost(); });
+  const ff = $("#fFat");
+  ff.innerHTML = Array.from({ length: 10 }, (_, i) => `<button type="button" class="chip num" data-v="${i + 1}" aria-pressed="false">${i + 1}</button>`).join("");
+  toggleChips(ff, () => (F.fatigue ? String(F.fatigue) : ""), (v) => { F.fatigue = v ? Number(v) : null; syncFat(); updatePost(); });
+  const fc = $("#fCond");
+  fc.innerHTML = COND.map(([k, l]) => `<button type="button" class="chip" data-v="${esc(k)}" aria-pressed="false">${esc(k)} ${esc(l)}</button>`).join("");
+  toggleChips(fc, () => F.cond, (v) => { F.cond = v; setChip(fc, v); updatePost(); });
+
+  ["fDate", "fTime", "fTemp", "fBody", "fMeet"].forEach((id) => $("#" + id).addEventListener("input", readForm));
+  $("#fWind").addEventListener("input", () => { F.windAuto = false; readForm(); });
+  $("#wxBtn").addEventListener("click", () => doWeather(false));
+
+  // 投稿
+  $("#pOpts").addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (!b) return;
+    b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
+    savePostPrefs();
+    updatePost();
+  });
+  $("#pTags").addEventListener("input", () => { savePostPrefs(); updatePost(); });
+  $("#pText").addEventListener("input", () => {
+    F.postManual = true; F.post = $("#pText").value; $("#pReset").hidden = false; updateCount(); updateXLink();
+  });
+  $("#pReset").addEventListener("click", () => { F.postManual = false; updatePost(); });
+  $("#saveBtn").addEventListener("click", async () => {
+    readForm();
+    if (!F.wx && getLoc()) await doWeather(true);
+    afterSave(saveEntry(F));
+  });
+  // X のリンクはクリック時点の文で開く（天気の取得は待たない：ポップアップがブロックされないように）
+  $("#xBtn").addEventListener("click", () => { readForm(); updateXLink(); afterSave(saveEntry(F)); });
+  $("#copyBtn").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("#pText").value); toast("コピーしました"); }
+    catch (e) { $("#pText").select(); toast("選択しました。長押しでコピーしてください"); }
+  });
+  $("#newBtn").addEventListener("click", () => { loadForm(blankEntry()); window.scrollTo(0, 0); });
+  const pp = lsGet(LS_POST, null);
+  if (pp && typeof pp === "object") {
+    $$("#pOpts .chip").forEach((c) => { if (typeof pp[c.dataset.k] === "boolean") c.setAttribute("aria-pressed", pp[c.dataset.k] ? "true" : "false"); });
+    if (typeof pp.tags === "string") $("#pTags").value = pp.tags.slice(0, 100);
+  }
+}
+function afterSave(ok) {
+  if (!ok) return;
+  $("#formTitle").textContent = "練習を編集";
+  const marks = F.races.map((x, i) => raceMark(F, i));
+  toast(marks.includes("PB") ? "保存しました。PB更新です！" : marks.includes("SB") ? "保存しました。SB更新です" : "保存しました");
+}
+function savePostPrefs() {
+  const o = { tags: $("#pTags").value };
+  $$("#pOpts .chip").forEach((c) => { o[c.dataset.k] = c.getAttribute("aria-pressed") === "true"; });
+  lsSet(LS_POST, o);
+}
+function syncMarks() {
+  $$("#fMarks .chip").forEach((c) => c.setAttribute("aria-pressed", F.marks.includes(c.dataset.v) ? "true" : "false"));
+  $("#raceCard").hidden = !(F.marks.includes("試合") || F.races.length);
+}
+function syncFat() {
+  setChip($("#fFat"), F.fatigue ? String(F.fatigue) : "");
+  $("#fFatV").textContent = F.fatigue ? F.fatigue + "（" + FAT[F.fatigue] + "）" : "—";
+}
+function syncCounts() {
+  $("#runCount").textContent = F.menu.length ? F.menu.length + "件" : "";
+  $("#weightCount").textContent = F.weights.length ? F.weights.length + "件" : "";
+  $("#extraCount").textContent = F.extras.length ? F.extras.length + "件" : "";
+  $("#headPreview").textContent = "見出し：" + headLine(F);
+}
+function readForm() {
+  const prevKey = F.date + " " + F.time;
+  F.date = /^\d{4}-\d{2}-\d{2}$/.test($("#fDate").value) ? $("#fDate").value : todayStr();
+  F.time = /^\d{2}:\d{2}$/.test($("#fTime").value) ? $("#fTime").value : "";
+  if (F.wx && prevKey !== F.date + " " + F.time) { F.wx = null; renderWxStatus(); } // 日時を変えたら天気は取り直す
+  F.temp = $("#fTemp").value.trim().slice(0, 6);
+  F.wind = $("#fWind").value.trim().slice(0, 80);
+  F.body = $("#fBody").value.slice(0, 5000);
+  F.meet = $("#fMeet").value.trim().slice(0, 60);
+  updatePost();
+}
+function loadForm(e) {
+  F = clone(e);
+  $("#fDate").value = F.date; $("#fTime").value = F.time || ""; $("#fTemp").value = F.temp || ""; $("#fWind").value = F.wind || "";
+  $("#fBody").value = F.body || ""; $("#fMeet").value = F.meet || "";
+  setChip($("#fInt"), F.intensity);
+  setChip($("#fWeather"), F.weather);
+  setChip($("#fCond"), F.cond);
+  syncFat(); syncMarks();
+  $("#formTitle").textContent = S.entries.some((x) => x.id === F.id) ? "練習を編集" : "今日の練習";
+  $("#weightCard").open = F.weights.length > 0;
+  $("#extraCard").open = F.extras.length > 0;
+  renderMenuList(); renderWeightList(); renderExtraList(); renderRaceList();
+  renderWxStatus();
+  updatePost();
+}
+function opt(k) { const c = $(`#pOpts .chip[data-k="${k}"]`); return c && c.getAttribute("aria-pressed") === "true"; }
+function autoPost() {
+  const L = [headLine(F)];
+  if (F.races.length) L.push(F.races.map((x, i) => raceLine(x, raceMark(F, i))).join("\n"));
+  if (opt("menu")) {
+    const lines = [].concat(F.menu.map(menuLine), F.weights.map(weightLine), F.extras.filter((o) => o.post).map(extraLine));
+    if (lines.length) L.push(lines.join("\n"));
+  }
+  if (opt("cond")) {
+    const c = [F.weather, F.temp ? F.temp + "℃" : "", F.wind, F.fatigue ? "疲労度" + F.fatigue : "", F.cond ? "調子" + F.cond : ""].filter(Boolean).join(" ");
+    if (c) L.push(c);
+  }
+  if (opt("body") && F.body.trim()) L.push(F.body.trim());
+  if (opt("tags") && $("#pTags").value.trim()) L.push($("#pTags").value.trim());
+  return L.join("\n\n");
+}
+function updatePost() {
+  if (!F) return;
+  if (!F.postManual) { F.post = autoPost(); $("#pText").value = F.post; $("#pReset").hidden = true; }
+  else { $("#pText").value = F.post; $("#pReset").hidden = false; }
+  syncCounts();
+  updateCount();
+  updateXLink();
+}
+function updateCount() {
+  const n = xLen($("#pText").value);
+  const c = $("#pCount");
+  c.textContent = n + " / 280" + (n > 280 ? "　長すぎます" : "");
+  c.classList.toggle("over", n > 280);
+}
+function xUrl(text) { return "https://x.com/intent/post?text=" + encodeURIComponent(text); }
+function updateXLink() { $("#xBtn").href = xUrl($("#pText").value); }
+
+// 並べ替え・削除つきの一覧（ラン・ウエイト・その他・試合で共通）
+function renderItemList(el, items, lineFn, onChange, extraBtn) {
+  el.innerHTML = items.map((it, i) => `<div class="menuitem"><span class="t num">${esc(lineFn(it, i))}</span>${extraBtn ? extraBtn(it, i) : ""}<button type="button" class="btn small" data-i="${i}" data-act="up" aria-label="上へ" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" class="btn small danger" data-i="${i}" data-act="del">削除</button></div>`).join("");
+  el.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+    const i = Number(b.dataset.i);
+    if (b.dataset.act === "del") items.splice(i, 1);
+    else if (b.dataset.act === "up" && i > 0) { const t = items[i - 1]; items[i - 1] = items[i]; items[i] = t; }
+    else if (b.dataset.act === "post") items[i].post = !items[i].post;
+    onChange();
+  }));
+}
+
+/* ---------- ランメニュー ---------- */
+const M = { segs: [150], reps: 3, sets: 1, timing: "hand", kind: "" };
+function parseSegs(s) {
+  const parts = toHalf(s).replace(/[＋]/g, "+").split("+").map((p) => p.trim()).filter(Boolean);
+  const segs = parts.slice(0, 6).map((p) => Math.round(Number(p.replace(/m$/i, ""))));
+  return segs.length && segs.every((x) => x > 0 && x <= 50000) ? segs : null;
+}
+function buildRun() {
+  const mk = $("#mKind");
+  mk.innerHTML = chipsHTML(KINDS, "");
+  toggleChips(mk, () => M.kind, (v) => { M.kind = v; setChip(mk, v); $("#mKindNameWrap").hidden = v !== "その他"; });
+  const md = $("#mDist");
+  md.innerHTML = DISTS.map((d) => `<button type="button" class="chip num" data-v="${d}" aria-pressed="${d === 150}">${d}m</button>`).join("");
+  md.addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (!b) return;
+    const inp = $("#mDistIn");
+    // 「＋区間」を押した直後なら区間として足す。そうでなければ置き換える
+    inp.value = /\+\s*$/.test(inp.value) ? inp.value.replace(/\s*$/, "") + b.dataset.v : b.dataset.v;
+    onDistInput();
+  });
+  $("#mPlus").addEventListener("click", () => { const inp = $("#mDistIn"); if (!/\+\s*$/.test(inp.value)) inp.value = inp.value.trim() + "+"; inp.focus(); });
+  $("#mDistIn").addEventListener("input", onDistInput);
+  $$("[data-step]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.step;
+    M[k] = Math.max(1, Math.min(k === "reps" ? 20 : 6, M[k] + Number(b.dataset.d)));
+    $("#mReps").textContent = M.reps;
+    $("#mSets").textContent = M.sets;
+    renderTimeInputs();
+  }));
+  $("#mLinkChips").innerHTML = chipsHTML(LINKS, "");
+  $("#mLinkChips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) $("#mLink").value = b.dataset.v; });
+  chipGroup($("#mTiming"), (v) => { M.timing = v; });
+  $("#mAdd").addEventListener("click", addMenu);
+  renderTimeInputs();
+}
+function onDistInput() {
+  const segs = parseSegs($("#mDistIn").value);
+  const one = segs && segs.length === 1 ? segs[0] : null;
+  setChip($("#mDist"), one == null ? "" : String(one));
+  if (segs && segsStr(segs) !== segsStr(M.segs)) { M.segs = segs; renderTimeInputs(); }
+}
+function renderTimeInputs() {
+  const old = {};
+  $$("#mTimes input").forEach((i) => { old[i.id] = i.value; });
+  const multi = M.segs.length > 1;
+  let h = "";
+  for (let s = 0; s < M.sets; s++) for (let r = 0; r < M.reps; r++) {
+    const k = s * M.reps + r;
+    const lab = (M.sets > 1 ? (s + 1) + "-" : "") + (r + 1) + "本目";
+    const ins = M.segs.map((d, j) => `<input class="num" inputmode="decimal" maxlength="8" id="mt${k}_${j}" aria-label="${lab} ${d}mのタイム" placeholder="${multi ? d : ""}" value="${esc(old["mt" + k + "_" + j] || "")}">`).join(multi ? `<span class="plus">+</span>` : "");
+    h += multi ? `<div class="rep"><b>${lab}</b><div class="segs">${ins}</div></div>` : `<label><b>${lab}</b>${ins}</label>`;
+  }
+  const t = $("#mTimes");
+  t.innerHTML = h;
+  t.classList.toggle("multi", multi);
+  $("#mSetRestWrap").hidden = M.sets < 2;
+  $("#mLinkWrap").hidden = !multi;
+}
+function addMenu() {
+  const segs = parseSegs($("#mDistIn").value);
+  if (!segs) { toast("距離を 150 や 250+50 のように入れてください"); return; }
+  M.segs = segs;
+  const n = M.reps * M.sets;
+  const times = [];
+  for (let k = 0; k < n; k++) times.push(segs.map((_, j) => { const el = $(`#mt${k}_${j}`); const v = el ? parseTime(el.value) : NaN; return isFinite(v) ? Math.round(v * 100) / 100 : null; }));
+  const item = sanitizeRun({ segs, reps: M.reps, sets: M.sets, times, kind: M.kind, kindName: $("#mKindName").value.trim(), link: segs.length > 1 ? $("#mLink").value.trim() : "", rest: toHalf($("#mRest").value).trim(), setRest: M.sets > 1 ? toHalf($("#mSetRest").value).trim() : "", timing: M.timing, note: $("#mNote").value.trim() });
+  if (!item) { toast("追加できませんでした"); return; }
+  F.menu.push(item);
+  $$("#mTimes input").forEach((i) => { i.value = ""; });
+  $("#mNote").value = "";
+  renderMenuList();
+  updatePost();
+}
+function renderMenuList() { renderItemList($("#menuList"), F.menu, menuLine, () => { renderMenuList(); updatePost(); }); }
+
+/* ---------- ウエイト ---------- */
+const G = { reps: 5, sets: 3 };
+function buildWeight() {
+  const ex = $("#gEx");
+  ex.innerHTML = chipsHTML(WEIGHT_EX, "スクワット");
+  chipGroup(ex, (v) => { $("#gName").value = v === "その他" ? "" : v; if (v === "その他") $("#gName").focus(); });
+  $$("[data-gstep]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.gstep;
+    G[k] = Math.max(1, Math.min(k === "reps" ? 100 : 20, G[k] + Number(b.dataset.d)));
+    $("#gReps").textContent = G.reps; $("#gSets").textContent = G.sets;
+  }));
+  $("#gAdd").addEventListener("click", () => {
+    const g = sanitizeWeight({ name: $("#gName").value.trim(), kg: toHalf($("#gKg").value).trim().replace(/\s+/g, ""), reps: G.reps, sets: G.sets, note: $("#gNote").value.trim() });
+    if (!g) { toast("種目名を入れてください"); return; }
+    F.weights.push(g);
+    $("#gKg").value = ""; $("#gNote").value = "";
+    renderWeightList(); updatePost();
+  });
+}
+function renderWeightList() { renderItemList($("#weightList"), F.weights, weightLine, () => { renderWeightList(); updatePost(); }); }
+
+/* ---------- その他の練習 ---------- */
+const O = { cat: "ジョグ", sets: 1 };
+const OCAT_UI = {
+  "ジョグ": { name: false, nameLabel: "", amt: true, amtLabel: "時間・距離", sets: false, chips: ["10分", "15分", "20分", "30分", "2km", "3km", "5km"] },
+  "ストレッチ": { name: true, nameLabel: "内容（任意）", amt: true, amtLabel: "時間（任意）", sets: false, chips: ["10分", "15分", "20分"] },
+  "ドリル": { name: true, nameLabel: "内容（任意。例：ミニハードル、A・B・Cスキップ）", amt: false, sets: false, chips: [] },
+  "補強": { name: true, nameLabel: "種目（例：体幹、腹筋、背筋）", amt: true, amtLabel: "回数・時間", sets: true, chips: ["10回", "20回", "30回", "30秒", "1分"] },
+  "プライオ・跳躍": { name: true, nameLabel: "種目", amt: true, amtLabel: "回数・距離", sets: true, chips: ["5回", "10回", "20回", "20m", "30m", "50m"] },
+  "ケア": { name: true, nameLabel: "内容（任意。例：アイシング、マッサージ）", amt: false, sets: false, chips: [] },
+};
+function buildExtra() {
+  const oc = $("#oCat");
+  oc.innerHTML = chipsHTML(OCATS, O.cat);
+  chipGroup(oc, (v) => { O.cat = v; syncExtraForm(); });
+  const op = $("#oPlyo");
+  op.innerHTML = chipsHTML(PLYO, "バウンディング");
+  chipGroup(op, (v) => { $("#oName").value = v === "その他" ? "" : v; if (v === "その他") $("#oName").focus(); });
+  $("#oAmtChips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) $("#oAmt").value = b.dataset.v; });
+  $$("[data-ostep]").forEach((b) => b.addEventListener("click", () => { O.sets = Math.max(1, Math.min(20, O.sets + Number(b.dataset.ostep))); $("#oSets").textContent = O.sets; }));
+  $("#oAdd").addEventListener("click", () => {
+    const ui = OCAT_UI[O.cat];
+    const name = ui.name ? $("#oName").value.trim() : "";
+    if (O.cat === "プライオ・跳躍" && !name) { toast("種目を選んでください"); return; }
+    const o = sanitizeExtra({ cat: O.cat, name, amt: ui.amt ? toHalf($("#oAmt").value).trim() : "", sets: ui.sets ? O.sets : null });
+    if (!o) return;
+    F.extras.push(o);
+    $("#oAmt").value = "";
+    if (O.cat !== "プライオ・跳躍") $("#oName").value = "";
+    renderExtraList(); updatePost();
+  });
+  $("#oSaveTpl").addEventListener("click", () => {
+    if (!F.extras.length) { toast("先に練習を追加してください"); return; }
+    lsSet(LS_TPL, F.extras.map((o) => Object.assign({}, o)));
+    renderTplInfo();
+    toast("いつものセットに登録しました");
+  });
+  $("#oUseTpl").addEventListener("click", () => {
+    const t = getTpl();
+    if (!t.length) { toast("まだ登録されていません。追加してから「登録」を押してください"); return; }
+    t.forEach((o) => F.extras.push(o));
+    renderExtraList(); updatePost();
+  });
+  syncExtraForm(); renderTplInfo();
+}
+function getTpl() { const t = lsGet(LS_TPL, []); return Array.isArray(t) ? t.slice(0, 30).map(sanitizeExtra).filter(Boolean) : []; }
+function renderTplInfo() { const t = getTpl(); $("#oTplInfo").textContent = t.length ? "いつものセット：" + t.map(extraLine).join("、") : "よくやる内容を追加してから「登録」を押すと、次から1回で入れられます。"; }
+function syncExtraForm() {
+  const ui = OCAT_UI[O.cat];
+  $("#oPlyo").hidden = O.cat !== "プライオ・跳躍";
+  $("#oNameWrap").hidden = !ui.name;
+  $("#oNameLabel").textContent = ui.nameLabel;
+  $("#oAmtWrap").hidden = !ui.amt;
+  $("#oAmtLabel").textContent = ui.amtLabel || "";
+  $("#oSetsWrap").hidden = !ui.sets;
+  $("#oAmtRow").hidden = !ui.amt && !ui.sets;
+  $("#oAmtChips").innerHTML = chipsHTML(ui.chips, "", "num");
+  $("#oName").value = O.cat === "プライオ・跳躍" ? (chipVal($("#oPlyo")) === "その他" ? "" : chipVal($("#oPlyo")) || "") : "";
+  $("#oAmt").value = "";
+}
+function renderExtraList() {
+  renderItemList($("#extraList"), F.extras, extraLine, () => { renderExtraList(); updatePost(); },
+    (o, i) => `<button type="button" class="btn small${o.post ? "" : " off"}" data-i="${i}" data-act="post" aria-pressed="${o.post}">${o.post ? "投稿に入れる" : "投稿に入れない"}</button>`);
+}
+
+/* ---------- 試合結果 ---------- */
+const X = { event: "100", timing: "elec", round: "", relayType: "4×100m", leg: "" };
+function buildRace() {
+  const xe = $("#xEvent");
+  xe.innerHTML = RACE_EVENTS.map((v) => `<button type="button" class="chip num" data-v="${v}" aria-pressed="${v === X.event}">${v === "relay" ? "リレー" : v + "m"}</button>`).join("");
+  chipGroup(xe, (v) => { X.event = v; if (v !== "relay") $("#xDist").value = v; syncRaceForm(); });
+  $("#xDist").addEventListener("input", () => { setChip(xe, String(Number(toHalf($("#xDist").value)))); X.event = "ind"; syncRaceForm(); });
+  chipGroup($("#xRelayType"), (v) => { X.relayType = v; $("#xRelayNameWrap").hidden = v !== "その他"; });
+  toggleChips($("#xLeg"), () => X.leg, (v) => { X.leg = v; setChip($("#xLeg"), v); });
+  toggleChips($("#xRound"), () => X.round, (v) => { X.round = v; setChip($("#xRound"), v); });
+  chipGroup($("#xTiming"), (v) => { X.timing = v; });
+  $("#xAdd").addEventListener("click", addRace);
+  syncRaceForm();
+}
+function syncRaceForm() {
+  const relay = X.event === "relay";
+  const d = Number(toHalf($("#xDist").value));
+  $("#xDistRow").hidden = relay;
+  $("#xRelay").hidden = !relay;
+  $("#xSplitWrap").hidden = !relay;
+  $("#xWindWrap").hidden = relay || !(d > 0 && windAffected(d));
+  $("#xTimeLabel").textContent = relay ? "チームのタイム" : "タイム";
+}
+function addRace() {
+  const relay = X.event === "relay";
+  const time = parseTime($("#xTime").value);
+  if (!isFinite(time)) { toast("タイムを入れてください（例：11.20）"); return; }
+  const ws = $("#xWind").value.trim();
+  const wind = !relay && ws ? parseWind(ws) : null;
+  if (!relay && ws && (!isFinite(wind) || Math.abs(wind) > 20)) { toast("風速は +1.2 や -0.5 のように入れてください"); return; }
+  const num = (id) => { const v = Number(toHalf($(id).value)); return $(id).value.trim() && isFinite(v) ? v : null; };
+  const split = relay ? parseTime($("#xSplit").value) : NaN;
+  const x = sanitizeRace({
+    event: relay ? "relay" : "ind", dist: relay ? null : Number(toHalf($("#xDist").value)), time: Math.round(time * 100) / 100,
+    wind: wind == null ? null : wind, timing: X.timing, round: X.round, place: num("#xPlace"), heat: num("#xHeat"), lane: num("#xLane"),
+    relayType: X.relayType, relayName: $("#xRelayName").value.trim(), leg: X.leg ? Number(X.leg) : null, split: isFinite(split) ? Math.round(split * 100) / 100 : null,
+  });
+  if (!x) { toast("距離とタイムを確認してください"); return; }
+  F.races.push(x);
+  if (!F.marks.includes("試合")) F.marks.push("試合");
+  ["#xTime", "#xWind", "#xPlace", "#xHeat", "#xLane", "#xSplit"].forEach((id) => { $(id).value = ""; });
+  syncMarks(); renderRaceList(); updatePost();
+}
+function renderRaceList() {
+  renderItemList($("#raceList"), F.races, (x, i) => raceLine(x, raceMark(F, i)), () => { renderRaceList(); syncMarks(); updatePost(); });
+}
+
+/* ---------- 自己記録（PB・SB） ---------- */
+const LS_REC = "sprintlog.records.v1";
+const REC_EVENTS = [60, 100, 150, 200, 300, 400];
+const R = { list: [], timing: "elec", pending: null };
+function sanitizeRec(r) {
+  if (!r || typeof r !== "object") return null;
+  if (typeof r.id !== "string" || !/^r[a-z0-9]{4,40}$/.test(r.id)) return null;
+  const dist = numIn(r.dist, 1, 50000), time = numIn(r.time, 0.01, 36000);
+  if (dist == null || time == null) return null;
+  if (typeof r.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return null;
+  return { id: r.id, dist: Math.round(dist), time, wind: numIn(r.wind, -20, 20), timing: r.timing === "hand" ? "hand" : "elec", date: r.date, meet: str(r.meet, 60) };
+}
+function loadRecs() { const raw = lsGet(LS_REC, []); R.list = Array.isArray(raw) ? raw.map(sanitizeRec).filter(Boolean) : []; }
+function saveRecs() { if (!lsSet(LS_REC, R.list)) toast("保存できませんでした。端末の空き容量を確認してください"); }
+function windAffected(d) { return d <= 200; }
+// 公認として扱える記録か（電気計時、かつ200m以下は追い風2.0以下。風速未入力は公認扱い）
+function isLegal(r) { return r.timing === "elec" && !(windAffected(r.dist) && r.wind != null && r.wind > 2.0); }
+function recLabel(r, dp) {
+  const w = windAffected(r.dist) && r.wind != null ? `（${fmtWind(r.wind)}）` : "";
+  return fmt(r.time, r.timing === "hand" ? 1 : dp) + (r.timing === "hand" ? "（手）" : "") + w;
+}
+// 日記の試合結果を記録の形にする
+function raceRecs(e, upto) {
+  const out = [];
+  e.races.forEach((x, i) => {
+    if (upto != null && i >= upto) return;
+    if (x.event !== "ind") return;
+    out.push({ id: "x" + e.id + "-" + i, dist: x.dist, time: x.time, wind: x.wind, timing: x.timing, date: e.date, meet: [e.meet, x.round].filter(Boolean).join(" "), src: "race" });
+  });
+  return out;
+}
+// 手入力の記録＋保存済みの日記の試合結果（skipId の日記は除く）
+function allRecs(skipId) {
+  let a = R.list.slice();
+  S.entries.forEach((e) => { if (e.id !== skipId) a = a.concat(raceRecs(e)); });
+  return a;
+}
+function bestOf(list) { return list.reduce((b, r) => (!b || r.time < b.time ? r : b), null); }
+function pbOf(list, d, year) { return bestOf(list.filter((r) => r.dist === d && isLegal(r) && (!year || r.date.startsWith(year + "-")))); }
+// 日記 e の i 番目のレースが、その時点で PB か SB か
+function raceMark(e, i) {
+  const x = e.races[i];
+  if (!x || x.event !== "ind") return "";
+  const me = { dist: x.dist, time: x.time, wind: x.wind, timing: x.timing };
+  if (!isLegal(me)) return "";
+  const prior = allRecs(e.id).filter((r) => r.date <= e.date).concat(raceRecs(e, i));
+  const pb = pbOf(prior, x.dist);
+  if (!pb || x.time < pb.time) return "PB";
+  const sb = pbOf(prior, x.dist, e.date.slice(0, 4));
+  if (!sb || x.time < sb.time) return "SB";
+  return "";
+}
+function buildRecords() {
+  loadRecs();
+  const ev = $("#rEvent");
+  ev.innerHTML = REC_EVENTS.map((d) => `<button type="button" class="chip num" data-v="${d}" aria-pressed="${d === 100}">${d}m</button>`).join("");
+  chipGroup(ev, (v) => { $("#rDist").value = v; syncRecWind(); });
+  $("#rDist").addEventListener("input", () => { setChip(ev, String(Number(toHalf($("#rDist").value)))); syncRecWind(); });
+  chipGroup($("#rTiming"), (v) => { R.timing = v; });
+  $("#rDate").value = todayStr();
+  $("#sbYear").textContent = new Date().getFullYear();
+  $("#rAdd").addEventListener("click", () => {
+    const dist = Number(toHalf($("#rDist").value)), time = parseTime($("#rTime").value);
+    if (!(dist > 0 && dist <= 50000)) { toast("距離を入れてください"); return; }
+    if (!isFinite(time)) { toast("タイムを入れてください（例：11.20）"); return; }
+    const ws = $("#rWind").value.trim();
+    const wind = ws ? parseWind(ws) : null;
+    if (ws && (!isFinite(wind) || Math.abs(wind) > 20)) { toast("風速は +1.2 や -0.5 のように入れてください"); return; }
+    const rec = sanitizeRec({ id: newId("r"), dist, time: Math.round(time * 100) / 100, wind, timing: R.timing, date: $("#rDate").value || todayStr(), meet: $("#rMeet").value.trim() });
+    if (!rec) { toast("記録を追加できませんでした"); return; }
+    const before = pbOf(allRecs(), rec.dist);
+    R.list.push(rec); saveRecs();
+    $("#rTime").value = ""; $("#rWind").value = ""; $("#rMeet").value = "";
+    renderRecords();
+    toast(isLegal(rec) && (!before || rec.time < before.time) ? "PB更新！ おめでとうございます" : "記録を追加しました");
+  });
+  syncRecWind();
+}
+function syncRecWind() { const d = Number(toHalf($("#rDist").value)); $("#rWind").disabled = !(d > 0 && windAffected(d)); if ($("#rWind").disabled) $("#rWind").value = ""; }
+function renderRecords() {
+  const year = String(new Date().getFullYear());
+  const all = allRecs();
+  const ds = Array.from(new Set(all.map((r) => r.dist))).sort((a, b) => a - b);
+  $("#pbTable tbody").innerHTML = ds.map((d) => {
+    const pb = pbOf(all, d), sb = pbOf(all, d, year);
+    const ref = bestOf(all.filter((r) => r.dist === d && !isLegal(r)));
+    const refHtml = ref && (!pb || ref.time < pb.time) ? `<br><span class="hint">参考 ${esc(recLabel(ref, 2))}</span>` : "";
+    const cell = (r) => (r ? `<span class="num lg${r === pb ? " pbmark" : ""}">${esc(fmt(r.time))}</span><br><span class="hint">${esc(r.date.replace(/-/g, "/"))}${windAffected(d) && r.wind != null ? " " + fmtWind(r.wind) : ""}${r.meet ? " " + esc(r.meet) : ""}</span>` : "—");
+    return `<tr><td class="num">${d}m</td><td>${cell(pb)}${refHtml}</td><td>${cell(sb)}</td></tr>`;
+  }).join("");
+  $("#pbEmpty").hidden = ds.length > 0;
+  $("#pbTable").hidden = ds.length === 0;
+  // リレー（チームのベスト）
+  const relays = {};
+  S.entries.forEach((e) => e.races.forEach((x) => {
+    if (x.event !== "relay") return;
+    const k = raceName(x);
+    if (!relays[k] || x.time < relays[k].x.time) relays[k] = { x, e };
+  }));
+  const rk = Object.keys(relays).sort();
+  $("#relayBox").hidden = rk.length === 0;
+  $("#relayTable tbody").innerHTML = rk.map((k) => {
+    const { x, e } = relays[k];
+    return `<tr><td>${esc(k)}</td><td><span class="num lg">${esc(fmt(x.time, x.timing === "hand" ? 1 : 2))}</span>${x.timing === "hand" ? "（手）" : ""}<br><span class="hint">${esc(e.date.replace(/-/g, "/"))}</span></td><td class="hint">${esc([e.meet, x.round].filter(Boolean).join(" "))}${x.leg ? "<br>" + x.leg + "走" : ""}${x.split ? " 区間" + esc(fmt(x.split, x.timing === "hand" ? 1 : 2)) : ""}</td></tr>`;
+  }).join("");
+  // 手で入れた記録の一覧
+  const rs = R.list.slice().sort((a, b) => b.date.localeCompare(a.date));
+  $("#recList").innerHTML = rs.length ? `<h3>手で入れた記録</h3>` + rs.map((r) => `<div class="menuitem"><span class="t"><span class="num lg">${r.dist}m ${esc(recLabel(r, 2))}</span><br><span class="hint">${esc(r.date.replace(/-/g, "/"))}${r.meet ? "　" + esc(r.meet) : ""}${isLegal(r) ? "" : "　PB・SBの対象外"}</span></span><button type="button" class="btn small danger" data-rdel="${esc(r.id)}">${R.pending === r.id ? "本当に削除する" : "削除"}</button></div>`).join("") + `<p class="hint">試合結果から入った記録は、日記を編集すると直せます。</p>` : "";
+  $$("[data-rdel]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.rdel;
+    if (R.pending === id) { R.pending = null; R.list = R.list.filter((x) => x.id !== id); saveRecs(); renderRecords(); toast("削除しました"); }
+    else { R.pending = id; renderRecords(); setTimeout(() => { if (R.pending === id) { R.pending = null; renderRecords(); } }, 4000); }
+  }));
+}
+
+/* ---------- 練習ベスト（ランメニューごと） ---------- */
+function renderPracBest() {
+  const B = {}; // key -> { segs, elec:{one,avg}, hand:{one,avg} }
+  S.entries.forEach((e) => e.menu.forEach((m) => {
+    const k = menuKey(m);
+    B[k] = B[k] || { segs: m.segs, elec: { one: null, avg: null }, hand: { one: null, avg: null } };
+    const b = B[k][m.timing];
+    const full = m.times.filter((rep) => rep && rep.length === m.segs.length && rep.every((t) => t != null));
+    full.forEach((rep) => {
+      const tot = rep.reduce((a, t) => a + t, 0);
+      if (!b.one || tot < b.one.t) b.one = { t: tot, split: rep, date: e.date, link: m.link, kind: kindLabel(m) };
+    });
+    if (full.length >= 2) {
+      const avg = full.reduce((a, rep) => a + rep.reduce((x, t) => x + t, 0), 0) / full.length;
+      if (!b.avg || avg < b.avg.t) b.avg = { t: avg, n: full.length, date: e.date, link: m.link, kind: kindLabel(m) };
+    }
+  }));
+  const keys = Object.keys(B).filter((k) => ["elec", "hand"].some((tm) => B[k][tm].one)).sort((a, b) => B[a].segs.reduce((x, y) => x + y, 0) - B[b].segs.reduce((x, y) => x + y, 0) || a.localeCompare(b));
+  const dd = (d) => d.slice(5).replace("-", "/");
+  $("#pracBest").innerHTML = keys.length ? keys.map((k) => {
+    const multi = B[k].segs.length > 1;
+    const rows = ["elec", "hand"].filter((tm) => B[k][tm].one).map((tm) => {
+      const dp = tm === "hand" ? 1 : 2, b = B[k][tm];
+      const one = `1本 <span class="num lg">${fmt(b.one.t, dp)}</span>${multi ? `（${b.one.split.map((t) => fmt(t, dp)).join("+")}）` : ""} <span class="hint">${dd(b.one.date)}${b.one.kind ? " " + esc(b.one.kind) : ""}${multi && b.one.link ? " つなぎ " + esc(b.one.link) : ""}</span>`;
+      const avg = b.avg ? `平均 <span class="num lg">${fmt(b.avg.t, dp)}</span> <span class="hint">${b.avg.n}本 ${dd(b.avg.date)}${multi && b.avg.link ? " つなぎ " + esc(b.avg.link) : ""}</span>` : `<span class="hint">平均は2本以上測った日から出ます</span>`;
+      return `<div class="pbrow"><span class="pill">${tm === "hand" ? "手動" : "電気"}</span><div>${one}<br>${avg}</div></div>`;
+    }).join("");
+    return `<div class="entry"><div class="date">${esc(multi ? segsStr(B[k].segs) : k)}</div>${rows}</div>`;
+  }).join("") : `<p class="hint">ランメニューにタイムを入れて保存すると、メニューごとのベストが出ます。</p>`;
+}
+
+/* ---------- 記録タブ ---------- */
+let pendingDel = null;
+function renderLog() {
+  const es = S.entries.slice().sort((a, b) => b.date.localeCompare(a.date) || (b.time || "").localeCompare(a.time || "") || b.createdAt - a.createdAt);
+  // 今週のまとめ
+  const mon = new Date(); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const monS = ymd(mon);
+  const wk = es.filter((e) => e.date >= monS && !e.marks.includes("休養"));
+  $("#sWeek").textContent = new Set(wk.map((e) => e.date)).size;
+  $("#sStrong").textContent = new Set(wk.filter((e) => e.intensity === "強").map((e) => e.date)).size;
+  $("#sDist").textContent = wk.reduce((s, e) => s + e.menu.reduce((a, m) => a + m.segs.reduce((x, y) => x + y, 0) * m.reps * m.sets, 0), 0).toLocaleString();
+  // 一覧
+  $("#entryList").innerHTML = es.length ? es.map((e) => {
+    const d = new Date(e.date + "T00:00:00");
+    const meta = [e.wx ? wxText(e.wx) : [e.weather, e.temp ? e.temp + "℃" : "", e.wind].filter(Boolean).join(" "), e.fatigue ? "疲労度 " + e.fatigue : "", e.cond ? "調子" + e.cond : ""].filter(Boolean).join("　");
+    const lines = [].concat(e.races.map((x, i) => raceLine(x, raceMark(e, i))), e.menu.map(menuLine), e.weights.map(weightLine), e.extras.map(extraLine));
+    return `<div class="entry"><div class="head"><span class="date">${d.getMonth() + 1}/${d.getDate()}</span><span class="hint">${"日月火水木金土"[d.getDay()]}曜${e.time ? " " + esc(e.time) : ""}</span>${headTokens(e).map((t) => `<span class="pill${t === "試合" ? " pb" : ""}">${esc(t)}</span>`).join("")}${e.intensity ? `<span class="pill int">強度 ${esc(e.intensity)}</span>` : ""}</div>
+      ${e.meet && e.races.length ? `<div class="hint">${esc(e.meet)}</div>` : ""}
+      ${lines.length ? `<div class="menu num">${lines.map(esc).join("<br>")}</div>` : ""}
+      ${meta ? `<div class="hint">${esc(meta)}</div>` : ""}
+      ${e.body ? `<div class="body">${esc(e.body)}</div>` : ""}
+      <div class="row"><button type="button" class="btn small" data-edit="${esc(e.id)}">編集</button><a class="btn small" href="${esc(xUrl(e.post || ""))}" target="_blank" rel="noopener noreferrer">Xでポスト</a><button type="button" class="btn small danger" data-del="${esc(e.id)}">${pendingDel === e.id ? "本当に削除する" : "削除"}</button></div></div>`;
+  }).join("") : `<p class="hint">まだ記録がありません。「日記」タブで練習を書いて保存すると、ここに並びます。</p>`;
+  $$("[data-edit]").forEach((b) => b.addEventListener("click", () => {
+    const e = S.entries.find((x) => x.id === b.dataset.edit);
+    if (e) { loadForm(e); location.hash = "diary"; window.scrollTo(0, 0); }
+  }));
+  $$("[data-del]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.del;
+    if (pendingDel === id) { pendingDel = null; deleteEntry(id); toast("削除しました"); }
+    else {
+      pendingDel = id; renderLog();
+      setTimeout(() => { if (pendingDel === id) { pendingDel = null; renderLog(); } }, 4000);
+    }
+  }));
+  renderRecords();
+  renderPracBest();
+  renderBackupInfo();
+}
 /* ---------- 天気（Open-Meteo） ---------- */
 const WMO = (c) => {
   if (c === 0) return ["快晴", "晴れ"];
@@ -301,365 +966,6 @@ async function doWeather(silent) {
   } finally { btn.disabled = false; btn.textContent = "天気を自動で取得"; }
 }
 
-/* ---------- 日記フォーム ---------- */
-let F = null; // 編集中の日記
-function newId() {
-  const a = new Uint32Array(2);
-  crypto.getRandomValues(a);
-  return "e" + Date.now().toString(36) + a[0].toString(36) + a[1].toString(36);
-}
-function blankEntry() {
-  return { id: newId(), date: todayStr(), time: nowHourStr(), types: ["スプリント"], menu: [], weights: [], weather: "", temp: "", wind: "", windAuto: false, wx: null, rpe: 6, cond: "", body: "", post: "", postManual: false, createdAt: Date.now(), updatedAt: 0 };
-}
-const M = { dist: 150, reps: 3, sets: 1, timing: "hand" };
-
-function buildDiary() {
-  const ft = $("#fType");
-  ft.innerHTML = TYPES.map((t) => `<button type="button" class="chip" data-v="${esc(t)}" aria-pressed="false">${esc(t)}</button>`).join("");
-  ft.addEventListener("click", (e) => {
-    const b = e.target.closest(".chip");
-    if (!b) return;
-    const v = b.dataset.v, i = F.types.indexOf(v);
-    if (i >= 0) F.types.splice(i, 1); else F.types.push(v);
-    b.setAttribute("aria-pressed", i >= 0 ? "false" : "true");
-    syncWeightCard();
-    updatePost();
-  });
-  const fw = $("#fWeather");
-  fw.innerHTML = WEATHER.map((t) => `<button type="button" class="chip" data-v="${esc(t)}" aria-pressed="false">${esc(t)}</button>`).join("");
-  fw.addEventListener("click", (e) => {
-    const b = e.target.closest(".chip");
-    if (!b) return;
-    F.weather = F.weather === b.dataset.v ? "" : b.dataset.v;
-    setChip(fw, F.weather);
-    updatePost();
-  });
-  const fc = $("#fCond");
-  fc.innerHTML = COND.map(([k, l]) => `<button type="button" class="chip" data-v="${esc(k)}" aria-pressed="false">調子 ${esc(k)} ${esc(l)}</button>`).join("");
-  fc.addEventListener("click", (e) => {
-    const b = e.target.closest(".chip");
-    if (!b) return;
-    F.cond = F.cond === b.dataset.v ? "" : b.dataset.v;
-    setChip(fc, F.cond);
-    updatePost();
-  });
-  const md = $("#mDist");
-  md.innerHTML = DISTS.map((d) => `<button type="button" class="chip num" data-v="${d}" aria-pressed="${d === 150}">${d}m</button>`).join("");
-  chipGroup(md, (v) => { M.dist = Number(v); $("#mDistIn").value = v; });
-  $("#mDistIn").addEventListener("input", (e) => { M.dist = Number(toHalf(e.target.value)) || 0; setChip(md, M.dist); });
-  $$("[data-step]").forEach((b) => b.addEventListener("click", () => {
-    const k = b.dataset.step;
-    M[k] = Math.max(1, Math.min(k === "reps" ? 20 : 6, M[k] + Number(b.dataset.d)));
-    $("#mReps").textContent = M.reps;
-    $("#mSets").textContent = M.sets;
-    renderTimeInputs();
-  }));
-  chipGroup($("#mTiming"), (v) => { M.timing = v; });
-  $("#mAdd").addEventListener("click", addMenu);
-  ["fDate", "fTime", "fTemp", "fBody"].forEach((id) => $("#" + id).addEventListener("input", readForm));
-  $("#fWind").addEventListener("input", () => { F.windAuto = false; readForm(); });
-  $("#fRpe").addEventListener("input", (e) => { $("#fRpeV").textContent = e.target.value; readForm(); });
-  $("#wxBtn").addEventListener("click", () => doWeather(false));
-  $("#pOpts").addEventListener("click", (e) => {
-    const b = e.target.closest(".chip");
-    if (!b) return;
-    b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
-    savePostPrefs();
-    updatePost();
-  });
-  $("#pTags").addEventListener("input", () => { savePostPrefs(); updatePost(); });
-  $("#pText").addEventListener("input", () => {
-    F.postManual = true; F.post = $("#pText").value; $("#pReset").hidden = false; updateCount(); updateXLink();
-  });
-  $("#pReset").addEventListener("click", () => { F.postManual = false; updatePost(); });
-  $("#saveBtn").addEventListener("click", async () => {
-    readForm();
-    if (!F.wx && getLoc()) await doWeather(true);
-    if (saveEntry(F)) { toast("保存しました"); $("#formTitle").textContent = "練習を編集"; }
-  });
-  // X のリンクはクリック時点の文で開く（天気の取得は待たない：ポップアップがブロックされないように）
-  $("#xBtn").addEventListener("click", () => {
-    readForm(); updateXLink();
-    if (saveEntry(F)) $("#formTitle").textContent = "練習を編集";
-  });
-  $("#copyBtn").addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText($("#pText").value); toast("コピーしました"); }
-    catch (e) { $("#pText").select(); toast("選択しました。長押しでコピーしてください"); }
-  });
-  $("#newBtn").addEventListener("click", () => { loadForm(blankEntry()); window.scrollTo(0, 0); });
-  const pp = lsGet(LS_POST, null);
-  if (pp && typeof pp === "object") {
-    $$("#pOpts .chip").forEach((c) => { if (typeof pp[c.dataset.k] === "boolean") c.setAttribute("aria-pressed", pp[c.dataset.k] ? "true" : "false"); });
-    if (typeof pp.tags === "string") $("#pTags").value = pp.tags.slice(0, 100);
-  }
-  renderTimeInputs();
-}
-function savePostPrefs() {
-  const o = { tags: $("#pTags").value };
-  $$("#pOpts .chip").forEach((c) => { o[c.dataset.k] = c.getAttribute("aria-pressed") === "true"; });
-  lsSet(LS_POST, o);
-}
-function renderTimeInputs() {
-  const old = $$("#mTimes input").map((i) => i.value);
-  let h = "";
-  for (let s = 0; s < M.sets; s++) for (let r = 0; r < M.reps; r++) {
-    const k = s * M.reps + r;
-    const lab = (M.sets > 1 ? (s + 1) + "-" : "") + (r + 1) + "本目";
-    h += `<label><b>${lab}</b><input class="num" inputmode="decimal" maxlength="8" id="mt${k}" aria-label="${M.sets > 1 ? (s + 1) + "セット目" : ""}${r + 1}本目のタイム" value="${esc(old[k] || "")}"></label>`;
-  }
-  $("#mTimes").innerHTML = h;
-  $("#mSetRestWrap").hidden = M.sets < 2;
-}
-function addMenu() {
-  const dist = Number(toHalf($("#mDistIn").value));
-  if (!(dist > 0 && dist <= 50000)) { toast("距離を入れてください"); return; }
-  const times = $$("#mTimes input").map((i) => { const v = parseTime(i.value); return isFinite(v) ? Math.round(v * 100) / 100 : null; });
-  F.menu.push({ dist, reps: M.reps, sets: M.sets, rest: toHalf($("#mRest").value).trim().slice(0, 8), setRest: M.sets > 1 ? toHalf($("#mSetRest").value).trim().slice(0, 8) : "", timing: M.timing, times, note: $("#mNote").value.trim().slice(0, 100) });
-  $$("#mTimes input").forEach((i) => { i.value = ""; });
-  $("#mNote").value = "";
-  renderMenuList();
-  updatePost();
-}
-// 数字だけなら「分」を付ける。90秒 や 90" のように書いたものはそのまま
-function restStr(v) { return /^\d+(\.\d+)?$/.test(v) ? v + "分" : v; }
-function menuLine(m) {
-  let s = `${m.dist}m×${m.reps}${m.sets > 1 ? "×" + m.sets : ""}`;
-  // 本数間は r、セット間は R
-  const rest = [m.rest ? "r" + restStr(m.rest) : "", m.setRest ? "R" + restStr(m.setRest) : ""].filter(Boolean).join("/");
-  if (rest) s += `（${rest}）`;
-  const ts = (m.times || []).filter((t) => t != null);
-  if (ts.length) {
-    const dp = m.timing === "hand" ? 1 : 2;
-    s += " " + (m.times || []).map((t) => (t == null ? "–" : fmt(t, dp))).join("/").replace(/(\/–)+$/, "");
-    if (m.timing === "hand") s += "（手）";
-  }
-  if (m.note) s += " " + m.note;
-  return s;
-}
-function renderMenuList() {
-  $("#menuList").innerHTML = F.menu.map((m, i) => `<div class="menuitem"><span class="t num">${esc(menuLine(m))}</span><button type="button" class="btn small" data-mi="${i}" data-act="up" aria-label="上へ" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" class="btn small danger" data-mi="${i}" data-act="del">削除</button></div>`).join("") || `<p class="hint">追加したメニューがここに並びます。</p>`;
-  $$("#menuList [data-mi]").forEach((b) => b.addEventListener("click", () => {
-    const i = Number(b.dataset.mi);
-    if (b.dataset.act === "del") F.menu.splice(i, 1);
-    else if (i > 0) { const t = F.menu[i - 1]; F.menu[i - 1] = F.menu[i]; F.menu[i] = t; }
-    renderMenuList();
-    updatePost();
-  }));
-}
-function readForm() {
-  const prevKey = F.date + " " + F.time;
-  F.date = /^\d{4}-\d{2}-\d{2}$/.test($("#fDate").value) ? $("#fDate").value : todayStr();
-  F.time = /^\d{2}:\d{2}$/.test($("#fTime").value) ? $("#fTime").value : "";
-  if (F.wx && prevKey !== F.date + " " + F.time) { F.wx = null; renderWxStatus(); } // 日時を変えたら天気は取り直す
-  F.temp = $("#fTemp").value.trim().slice(0, 6);
-  F.wind = $("#fWind").value.trim().slice(0, 80);
-  F.body = $("#fBody").value.slice(0, 5000);
-  F.rpe = Number($("#fRpe").value);
-  updatePost();
-}
-function loadForm(e) {
-  F = clone(e);
-  $("#fDate").value = F.date; $("#fTime").value = F.time || ""; $("#fTemp").value = F.temp || ""; $("#fWind").value = F.wind || "";
-  $("#fBody").value = F.body || ""; $("#fRpe").value = F.rpe || 6; $("#fRpeV").textContent = F.rpe || 6;
-  $$("#fType .chip").forEach((c) => c.setAttribute("aria-pressed", F.types.includes(c.dataset.v) ? "true" : "false"));
-  setChip($("#fWeather"), F.weather);
-  setChip($("#fCond"), F.cond);
-  $("#formTitle").textContent = S.entries.some((x) => x.id === F.id) ? "練習を編集" : "今日の練習";
-  renderMenuList();
-  renderWeightList();
-  syncWeightCard();
-  renderWxStatus();
-  updatePost();
-}
-function opt(k) { const c = $(`#pOpts .chip[data-k="${k}"]`); return c && c.getAttribute("aria-pressed") === "true"; }
-function autoPost() {
-  const d = new Date(F.date + "T00:00:00");
-  const wd = "日月火水木金土"[d.getDay()];
-  const L = [`${d.getMonth() + 1}/${d.getDate()}(${wd}) 練習${F.types.length ? "【" + F.types.join("・") + "】" : ""}`];
-  if (opt("menu") && F.menu.length) L.push(F.menu.map(menuLine).join("\n"));
-  if (opt("menu") && F.weights.length) L.push(F.weights.map(weightLine).join("\n"));
-  if (opt("cond")) {
-    const c = [F.weather, F.temp ? F.temp + "℃" : "", F.wind, F.cond ? "調子" + F.cond : "", F.rpe ? "RPE" + F.rpe : ""].filter(Boolean).join(" ");
-    if (c) L.push(c);
-  }
-  if (opt("body") && F.body.trim()) L.push(F.body.trim());
-  if (opt("tags") && $("#pTags").value.trim()) L.push($("#pTags").value.trim());
-  return L.join("\n\n");
-}
-function updatePost() {
-  if (!F.postManual) { F.post = autoPost(); $("#pText").value = F.post; $("#pReset").hidden = true; }
-  else { $("#pText").value = F.post; $("#pReset").hidden = false; }
-  updateCount();
-  updateXLink();
-}
-function updateCount() {
-  const n = xLen($("#pText").value);
-  const c = $("#pCount");
-  c.textContent = n + " / 280" + (n > 280 ? "　長すぎます" : "");
-  c.classList.toggle("over", n > 280);
-}
-function xUrl(text) { return "https://x.com/intent/post?text=" + encodeURIComponent(text); }
-function updateXLink() { $("#xBtn").href = xUrl($("#pText").value); }
-
-/* ---------- ウエイト ---------- */
-const WEIGHT_EX = ["スクワット", "ハーフスクワット", "デッドリフト", "ベンチプレス", "クリーン", "スナッチ", "ランジ", "ヒップスラスト", "ステップアップ", "カーフレイズ", "懸垂", "その他"];
-const G = { reps: 5, sets: 3 };
-function syncWeightCard() { $("#weightCard").hidden = !(F.types.includes("ウエイト") || F.weights.length); }
-function weightLine(g) {
-  const kg = g.kg ? (/^[\d.]+$/.test(g.kg) ? g.kg + "kg" : g.kg + (/kg$/i.test(g.kg) ? "" : "kg")) : "";
-  return `${g.name}${kg ? " " + kg : ""}×${g.reps}×${g.sets}${g.note ? " " + g.note : ""}`;
-}
-function buildWeight() {
-  const ex = $("#gEx");
-  ex.innerHTML = WEIGHT_EX.map((t) => `<button type="button" class="chip" data-v="${esc(t)}" aria-pressed="${t === "スクワット"}">${esc(t)}</button>`).join("");
-  chipGroup(ex, (v) => { $("#gName").value = v === "その他" ? "" : v; if (v === "その他") $("#gName").focus(); });
-  $$("[data-gstep]").forEach((b) => b.addEventListener("click", () => {
-    const k = b.dataset.gstep;
-    G[k] = Math.max(1, Math.min(k === "reps" ? 100 : 20, G[k] + Number(b.dataset.d)));
-    $("#gReps").textContent = G.reps; $("#gSets").textContent = G.sets;
-  }));
-  $("#gAdd").addEventListener("click", () => {
-    const name = $("#gName").value.trim().slice(0, 30);
-    if (!name) { toast("種目名を入れてください"); return; }
-    F.weights.push({ name, kg: toHalf($("#gKg").value).trim().replace(/\s+/g, "").slice(0, 30), reps: G.reps, sets: G.sets, note: $("#gNote").value.trim().slice(0, 60) });
-    $("#gKg").value = ""; $("#gNote").value = "";
-    renderWeightList(); updatePost();
-  });
-}
-function renderWeightList() {
-  $("#weightList").innerHTML = F.weights.map((g, i) => `<div class="menuitem"><span class="t num">${esc(weightLine(g))}</span><button type="button" class="btn small" data-gi="${i}" data-act="up" aria-label="上へ" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" class="btn small danger" data-gi="${i}" data-act="del">削除</button></div>`).join("") || `<p class="hint">追加したウエイトがここに並びます。</p>`;
-  $$("#weightList [data-gi]").forEach((b) => b.addEventListener("click", () => {
-    const i = Number(b.dataset.gi);
-    if (b.dataset.act === "del") F.weights.splice(i, 1);
-    else if (i > 0) { const t = F.weights[i - 1]; F.weights[i - 1] = F.weights[i]; F.weights[i] = t; }
-    renderWeightList(); syncWeightCard(); updatePost();
-  }));
-}
-
-/* ---------- 自己記録（PB・SB） ---------- */
-const LS_REC = "sprintlog.records.v1";
-const REC_EVENTS = [60, 100, 150, 200, 300, 400];
-const R = { list: [], timing: "elec", pending: null };
-function sanitizeRec(r) {
-  if (!r || typeof r !== "object") return null;
-  if (typeof r.id !== "string" || !/^r[a-z0-9]{4,40}$/.test(r.id)) return null;
-  const dist = numIn(r.dist, 1, 50000), time = numIn(r.time, 0.01, 36000);
-  if (dist == null || time == null) return null;
-  if (typeof r.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return null;
-  return { id: r.id, dist: Math.round(dist), time, wind: numIn(r.wind, -20, 20), timing: r.timing === "hand" ? "hand" : "elec", date: r.date, meet: str(r.meet, 60) };
-}
-function loadRecs() { const raw = lsGet(LS_REC, []); R.list = Array.isArray(raw) ? raw.map(sanitizeRec).filter(Boolean) : []; }
-function saveRecs() { if (!lsSet(LS_REC, R.list)) toast("保存できませんでした。端末の空き容量を確認してください"); }
-function windAffected(d) { return d <= 200; }
-// 公認として扱える記録か（電気計時、かつ100m・200mなどは追い風2.0以下。風速未入力は公認扱い）
-function isLegal(r) { return r.timing === "elec" && !(windAffected(r.dist) && r.wind != null && r.wind > 2.0); }
-function recLabel(r, dp) {
-  const w = windAffected(r.dist) && r.wind != null ? `（${fmtWind(r.wind)}）` : "";
-  return fmt(r.time, r.timing === "hand" ? 1 : dp) + (r.timing === "hand" ? "（手）" : "") + w;
-}
-function buildRecords() {
-  loadRecs();
-  const ev = $("#rEvent");
-  ev.innerHTML = REC_EVENTS.map((d) => `<button type="button" class="chip num" data-v="${d}" aria-pressed="${d === 100}">${d}m</button>`).join("");
-  chipGroup(ev, (v) => { $("#rDist").value = v; syncRecWind(); });
-  $("#rDist").addEventListener("input", () => { setChip(ev, Number(toHalf($("#rDist").value))); syncRecWind(); });
-  chipGroup($("#rTiming"), (v) => { R.timing = v; });
-  $("#rDate").value = todayStr();
-  $("#sbYear").textContent = new Date().getFullYear();
-  $("#rAdd").addEventListener("click", () => {
-    const dist = Number(toHalf($("#rDist").value)), time = parseTime($("#rTime").value);
-    if (!(dist > 0 && dist <= 50000)) { toast("距離を入れてください"); return; }
-    if (!isFinite(time)) { toast("タイムを入れてください（例：11.20）"); return; }
-    const ws = $("#rWind").value.trim();
-    const wind = ws ? parseWind(ws) : null;
-    if (ws && (!isFinite(wind) || Math.abs(wind) > 20)) { toast("風速は +1.2 や -0.5 のように入れてください"); return; }
-    const a = new Uint32Array(2); crypto.getRandomValues(a);
-    const rec = sanitizeRec({ id: "r" + Date.now().toString(36) + a[0].toString(36) + a[1].toString(36), dist, time: Math.round(time * 100) / 100, wind, timing: R.timing, date: $("#rDate").value || todayStr(), meet: $("#rMeet").value.trim() });
-    if (!rec) { toast("記録を追加できませんでした"); return; }
-    const before = pbOf(dist);
-    R.list.push(rec); saveRecs();
-    $("#rTime").value = ""; $("#rWind").value = ""; $("#rMeet").value = "";
-    renderRecords();
-    const after = pbOf(dist);
-    toast(after && after.id === rec.id && (!before || before.time > rec.time) ? "PB更新！ おめでとうございます" : "記録を追加しました");
-  });
-  syncRecWind();
-}
-function syncRecWind() { const d = Number(toHalf($("#rDist").value)); $("#rWind").disabled = !(d > 0 && windAffected(d)); if ($("#rWind").disabled) $("#rWind").value = ""; }
-function bestOf(list) { return list.reduce((b, r) => (!b || r.time < b.time ? r : b), null); }
-function pbOf(d, year) { return bestOf(R.list.filter((r) => r.dist === d && isLegal(r) && (!year || r.date.startsWith(year + "-")))); }
-function renderRecords() {
-  const year = String(new Date().getFullYear());
-  const ds = Array.from(new Set(R.list.map((r) => r.dist))).sort((a, b) => a - b);
-  $("#pbTable tbody").innerHTML = ds.map((d) => {
-    const pb = pbOf(d), sb = pbOf(d, year);
-    const ref = bestOf(R.list.filter((r) => r.dist === d && !isLegal(r)));
-    const refHtml = ref && (!pb || ref.time < pb.time) ? `<br><span class="hint">参考 ${esc(recLabel(ref, 2))}</span>` : "";
-    const cell = (r) => (r ? `<span class="num lg${r === pb ? " pbmark" : ""}">${esc(fmt(r.time))}</span><br><span class="hint">${esc(r.date.replace(/-/g, "/"))}${windAffected(d) && r.wind != null ? " " + fmtWind(r.wind) : ""}</span>` : "—");
-    return `<tr><td class="num">${d}m</td><td>${cell(pb)}${refHtml}</td><td>${cell(sb)}</td></tr>`;
-  }).join("");
-  $("#pbEmpty").hidden = ds.length > 0;
-  $("#pbTable").hidden = ds.length === 0;
-  const rs = R.list.slice().sort((a, b) => b.date.localeCompare(a.date));
-  $("#recList").innerHTML = rs.length ? `<h3>入れた記録</h3>` + rs.map((r) => `<div class="menuitem"><span class="t"><span class="num lg">${r.dist}m ${esc(recLabel(r, 2))}</span><br><span class="hint">${esc(r.date.replace(/-/g, "/"))}${r.meet ? "　" + esc(r.meet) : ""}${isLegal(r) ? "" : "　PB・SBの対象外"}</span></span><button type="button" class="btn small danger" data-rdel="${esc(r.id)}">${R.pending === r.id ? "本当に削除する" : "削除"}</button></div>`).join("") : "";
-  $$("[data-rdel]").forEach((b) => b.addEventListener("click", () => {
-    const id = b.dataset.rdel;
-    if (R.pending === id) { R.pending = null; R.list = R.list.filter((x) => x.id !== id); saveRecs(); renderRecords(); toast("削除しました"); }
-    else { R.pending = id; renderRecords(); setTimeout(() => { if (R.pending === id) { R.pending = null; renderRecords(); } }, 4000); }
-  }));
-}
-
-/* ---------- 記録一覧 ---------- */
-let pendingDel = null;
-function renderLog() {
-  const es = S.entries.slice().sort((a, b) => b.date.localeCompare(a.date) || (b.time || "").localeCompare(a.time || "") || b.createdAt - a.createdAt);
-  // まとめ
-  const mon = new Date(); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
-  const monS = ymd(mon);
-  const wk = es.filter((e) => e.date >= monS && !(e.types.length && e.types.every((t) => t === "休養")));
-  $("#sWeek").textContent = new Set(wk.map((e) => e.date)).size;
-  $("#sDist").textContent = wk.reduce((s, e) => s + e.menu.reduce((a, m) => a + m.dist * m.reps * m.sets, 0), 0).toLocaleString();
-  $("#sTotal").textContent = new Set(es.map((e) => e.date)).size;
-  // ベスト
-  const best = {};
-  es.forEach((e) => e.menu.forEach((m) => m.times.forEach((t) => {
-    if (t == null) return;
-    const k = m.dist, kk = m.timing === "hand" ? "hand" : "elec";
-    best[k] = best[k] || { elec: null, hand: null };
-    if (!best[k][kk] || t < best[k][kk].t) best[k][kk] = { t, date: e.date };
-  })));
-  const ks = Object.keys(best).map(Number).sort((a, b) => a - b);
-  const cell = (x, dp) => (x ? `<span class="num lg">${fmt(x.t, dp)}</span><br><span class="hint">${esc(x.date.slice(5).replace("-", "/"))}</span>` : "—");
-  $("#bestTable tbody").innerHTML = ks.map((k) => `<tr><td class="num">${k}m</td><td>${cell(best[k].elec, 2)}</td><td>${cell(best[k].hand, 1)}</td></tr>`).join("");
-  $("#bestEmpty").hidden = ks.length > 0;
-  $("#bestTable").hidden = ks.length === 0;
-  // 一覧
-  $("#entryList").innerHTML = es.length ? es.map((e) => {
-    const d = new Date(e.date + "T00:00:00");
-    const meta = [e.wx ? wxText(e.wx) : [e.weather, e.temp ? e.temp + "℃" : "", e.wind].filter(Boolean).join(" "), e.cond ? "調子" + e.cond : "", "RPE " + e.rpe].filter(Boolean).join("　");
-    return `<div class="entry"><div class="head"><span class="date">${d.getMonth() + 1}/${d.getDate()}</span><span class="hint">${"日月火水木金土"[d.getDay()]}曜${e.time ? " " + esc(e.time) : ""}</span>${e.types.map((t) => `<span class="pill${t === "試合" ? " pb" : ""}">${esc(t)}</span>`).join("")}</div>
-      ${e.menu.length ? `<div class="menu num">${e.menu.map((m) => esc(menuLine(m))).join("<br>")}</div>` : ""}
-      ${e.weights.length ? `<div class="menu num">${e.weights.map((g) => esc(weightLine(g))).join("<br>")}</div>` : ""}
-      ${meta ? `<div class="hint">${esc(meta)}</div>` : ""}
-      ${e.body ? `<div class="body">${esc(e.body)}</div>` : ""}
-      <div class="row"><button type="button" class="btn small" data-edit="${esc(e.id)}">編集</button><a class="btn small" href="${esc(xUrl(e.post || ""))}" target="_blank" rel="noopener noreferrer">Xでポスト</a><button type="button" class="btn small danger" data-del="${esc(e.id)}">${pendingDel === e.id ? "本当に削除する" : "削除"}</button></div></div>`;
-  }).join("") : `<p class="hint">まだ記録がありません。「日記」タブで練習を書いて保存すると、ここに並びます。</p>`;
-  $$("[data-edit]").forEach((b) => b.addEventListener("click", () => {
-    const e = S.entries.find((x) => x.id === b.dataset.edit);
-    if (e) { loadForm(e); location.hash = "diary"; window.scrollTo(0, 0); }
-  }));
-  $$("[data-del]").forEach((b) => b.addEventListener("click", () => {
-    const id = b.dataset.del;
-    if (pendingDel === id) { pendingDel = null; deleteEntry(id); toast("削除しました"); }
-    else {
-      pendingDel = id; renderLog();
-      setTimeout(() => { if (pendingDel === id) { pendingDel = null; renderLog(); } }, 4000);
-    }
-  }));
-  renderRecords();
-  renderBackupInfo();
-}
-
 /* ---------- 場所の設定 ---------- */
 function renderLoc() {
   const l = getLoc();
@@ -714,7 +1020,7 @@ function renderBackupInfo() {
   if (warn) $("#backupWarnText").textContent = (days == null ? "まだ一度もバックアップしていません。" : "最後のバックアップから" + days + "日たっています。") + "ブラウザのデータが消えると記録も消えるので、ときどきファイルに書き出してください。";
 }
 function exportData() {
-  const data = { app: "sprint-log", version: 2, exportedAt: new Date().toISOString(), entries: S.entries, records: R.list };
+  const data = { app: "sprint-log", version: 3, exportedAt: new Date().toISOString(), entries: S.entries, records: R.list };
   const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -861,13 +1167,18 @@ function route() {
   $$("nav.tabs a").forEach((a) => { if (a.dataset.v === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
 }
 
+
 /* ---------- 起動 ---------- */
 loadEntries();
-buildDiary(); buildWeight(); buildRecords(); buildConvert(); buildWind(); buildPace(); buildLoc(); buildBackup();
+buildRecords();
+buildDiary(); buildRun(); buildWeight(); buildExtra(); buildRace();
+buildConvert(); buildWind(); buildPace(); buildLoc(); buildBackup();
 loadForm(blankEntry());
 renderConvert(); renderWind(); renderPace(); renderLog();
 window.addEventListener("hashchange", route);
 route();
+// 旧い形式で保存されていたデータを新しい形式で保存し直す
+persist();
 // ブラウザにデータを消されにくくする（対応ブラウザのみ）
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 // オフラインでも開けるようにする

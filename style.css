@@ -112,3 +112,18 @@ a.src{color:var(--accent)}
 @media (prefers-reduced-motion: reduce){.toast{transition:none}}
 .pbmark{color:var(--pb)}
 input:disabled{opacity:.5}
+.w-xs{width:72px}
+details.card > summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+details.card > summary::-webkit-details-marker{display:none}
+details.card > summary::after{content:"＋";color:var(--muted);font-size:18px}
+details.card[open] > summary::after{content:"−"}
+details.card > summary h2{display:inline}
+.times.multi{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.rep{display:flex;flex-direction:column;gap:2px}
+.rep b{font-size:10px;color:var(--muted);font-weight:400}
+.rep .segs{display:flex;align-items:center;gap:4px}
+.rep .segs input{padding:8px 4px;text-align:center}
+.rep .plus{color:var(--muted)}
+.btn.off{color:var(--muted);border-style:dashed}
+.pbrow{display:flex;gap:8px;align-items:flex-start}
+.pill.int{color:var(--accent);border-color:currentColor}

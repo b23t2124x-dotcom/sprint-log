@@ -29,56 +29,160 @@
       <label class="f grow">日付<input type="date" id="fDate"></label>
       <label class="f w-time">練習した時刻<input type="time" id="fTime" step="3600"></label>
     </div>
-    <div class="chips" id="fType" role="group" aria-label="練習の種類"></div>
-  </div>
-
-  <div class="card">
-    <h2>メニュー<small>距離を選んで本数とタイムを入れる</small></h2>
-    <div class="chips" id="mDist" role="group" aria-label="距離"></div>
-    <div class="row">
-      <label class="f w-s">距離 (m)<input class="num" id="mDistIn" inputmode="numeric" value="150" maxlength="5"></label>
-      <div class="f">本数
-        <div class="stepper"><button type="button" data-step="reps" data-d="-1" aria-label="本数を減らす">−</button><span class="num" id="mReps">3</span><button type="button" data-step="reps" data-d="1" aria-label="本数を増やす">＋</button></div>
-      </div>
-      <div class="f">セット
-        <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="mSets">1</span><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+    <div class="f">強度（この日の練習の狙い）
+      <div class="chips" id="fInt" role="group" aria-label="強度">
+        <button type="button" class="chip" data-v="弱" aria-pressed="false">弱</button>
+        <button type="button" class="chip" data-v="中" aria-pressed="false">中</button>
+        <button type="button" class="chip" data-v="強" aria-pressed="false">強</button>
       </div>
     </div>
+    <div class="f">試合・休養の日はこちら
+      <div class="chips" id="fMarks" role="group" aria-label="試合・休養">
+        <button type="button" class="chip" data-v="試合" aria-pressed="false">試合・記録会</button>
+        <button type="button" class="chip" data-v="休養" aria-pressed="false">休養</button>
+      </div>
+    </div>
+    <p class="hint" id="headPreview"></p>
+  </div>
+
+  <!-- 試合結果 -->
+  <div class="card" id="raceCard" hidden>
+    <h2>試合結果<small>自己記録（PB・SB）に自動で入ります</small></h2>
+    <label class="f">大会名<input id="fMeet" maxlength="60" placeholder="例：県選手権、学内記録会"></label>
+    <div class="chips" id="xEvent" role="group" aria-label="種目"></div>
+    <div class="row" id="xDistRow">
+      <label class="f w-s">距離 (m)<input class="num" id="xDist" inputmode="numeric" value="100" maxlength="5"></label>
+    </div>
+    <div class="stack" id="xRelay" hidden>
+      <div class="chips" id="xRelayType" role="group" aria-label="リレーの種目">
+        <button type="button" class="chip" data-v="4×100m" aria-pressed="true">4×100m</button>
+        <button type="button" class="chip" data-v="4×400m" aria-pressed="false">4×400m</button>
+        <button type="button" class="chip" data-v="その他" aria-pressed="false">その他</button>
+      </div>
+      <label class="f" id="xRelayNameWrap" hidden>リレーの名前<input id="xRelayName" maxlength="20" placeholder="例：スウェーデンリレー"></label>
+      <div class="f">走順
+        <div class="chips" id="xLeg" role="group" aria-label="走順">
+          <button type="button" class="chip num" data-v="1" aria-pressed="false">1走</button>
+          <button type="button" class="chip num" data-v="2" aria-pressed="false">2走</button>
+          <button type="button" class="chip num" data-v="3" aria-pressed="false">3走</button>
+          <button type="button" class="chip num" data-v="4" aria-pressed="false">4走</button>
+        </div>
+      </div>
+    </div>
+    <div class="chips" id="xRound" role="group" aria-label="ラウンド">
+      <button type="button" class="chip" data-v="予選" aria-pressed="false">予選</button>
+      <button type="button" class="chip" data-v="準決勝" aria-pressed="false">準決勝</button>
+      <button type="button" class="chip" data-v="決勝" aria-pressed="false">決勝</button>
+      <button type="button" class="chip" data-v="TR" aria-pressed="false">TR</button>
+    </div>
     <div class="row">
-      <label class="f w-m">r 本数間 (分)<input class="num" id="mRest" inputmode="decimal" value="3" maxlength="8"></label>
-      <label class="f w-m" id="mSetRestWrap">R セット間 (分)<input class="num" id="mSetRest" inputmode="decimal" value="8" maxlength="8"></label>
+      <label class="f grow"><span id="xTimeLabel">タイム</span><input class="num" id="xTime" inputmode="decimal" maxlength="8" placeholder="例：11.20"></label>
+      <label class="f grow" id="xWindWrap">風速 (m/s)<input class="num" id="xWind" inputmode="decimal" maxlength="5" placeholder="例：+1.2"></label>
+      <label class="f grow" id="xSplitWrap" hidden>自分の区間 (任意)<input class="num" id="xSplit" inputmode="decimal" maxlength="8" placeholder="例：10.5"></label>
+    </div>
+    <div class="chips" id="xTiming" role="group" aria-label="計時">
+      <button type="button" class="chip" data-v="elec" aria-pressed="true">電気計時</button>
+      <button type="button" class="chip" data-v="hand" aria-pressed="false">手動計時</button>
+    </div>
+    <div class="row">
+      <label class="f w-xs">順位<input class="num" id="xPlace" inputmode="numeric" maxlength="3" placeholder="—"></label>
+      <label class="f w-xs">組<input class="num" id="xHeat" inputmode="numeric" maxlength="3" placeholder="—"></label>
+      <label class="f w-xs">レーン<input class="num" id="xLane" inputmode="numeric" maxlength="2" placeholder="—"></label>
+    </div>
+    <div class="row"><button type="button" class="btn primary grow" id="xAdd">結果を追加</button></div>
+    <div id="raceList" class="stack"></div>
+  </div>
+
+  <!-- ランメニュー -->
+  <details class="card" id="runCard" open>
+    <summary><h2>ランメニュー <small id="runCount"></small></h2></summary>
+    <div class="stack mt8">
+      <div class="f">種類（任意）
+        <div class="chips" id="mKind" role="group" aria-label="ランメニューの種類"></div>
+      </div>
+      <label class="f" id="mKindNameWrap" hidden>種類の名前<input id="mKindName" maxlength="20" placeholder="例：ミニハードル走"></label>
+      <div class="chips" id="mDist" role="group" aria-label="距離"></div>
+      <div class="row">
+        <label class="f grow">距離 (m)　250+50 のように区間も書けます<input class="num" id="mDistIn" inputmode="text" value="150" maxlength="30"></label>
+        <button type="button" class="btn self-end" id="mPlus" aria-label="区間を足す">＋区間</button>
+      </div>
+      <div class="row">
+        <div class="f">本数
+          <div class="stepper"><button type="button" data-step="reps" data-d="-1" aria-label="本数を減らす">−</button><span class="num" id="mReps">3</span><button type="button" data-step="reps" data-d="1" aria-label="本数を増やす">＋</button></div>
+        </div>
+        <div class="f">セット
+          <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="mSets">1</span><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+        </div>
+      </div>
+      <div class="stack" id="mLinkWrap" hidden>
+        <label class="f">つなぎ（区間のあいだ）<input id="mLink" maxlength="30" placeholder="例：10秒、ウォーク20m"></label>
+        <div class="chips" id="mLinkChips" role="group" aria-label="つなぎをすぐ選ぶ"></div>
+      </div>
+      <div class="row">
+        <label class="f w-m">r 本数間 (分)<input class="num" id="mRest" inputmode="decimal" value="3" maxlength="8"></label>
+        <label class="f w-m" id="mSetRestWrap">R セット間 (分)<input class="num" id="mSetRest" inputmode="decimal" value="8" maxlength="8"></label>
+      </div>
       <div class="chips" id="mTiming" role="group" aria-label="計時">
         <button type="button" class="chip" data-v="hand" aria-pressed="true">手動計時</button>
         <button type="button" class="chip" data-v="elec" aria-pressed="false">電気計時</button>
       </div>
+      <div class="times" id="mTimes"></div>
+      <label class="f">メモ（任意）<input id="mNote" maxlength="100" placeholder="例：スパイク、坂、向かい風"></label>
+      <div class="row">
+        <button type="button" class="btn primary grow" id="mAdd">ランメニューに追加</button>
+      </div>
+      <div id="menuList" class="stack"></div>
     </div>
-    <div class="times" id="mTimes"></div>
-    <label class="f">メモ（任意）<input id="mNote" maxlength="100" placeholder="例：スパイク、坂、ウォーク戻り"></label>
-    <div class="row">
-      <button type="button" class="btn primary grow" id="mAdd">メニューに追加</button>
-    </div>
-    <div id="menuList" class="stack"></div>
-  </div>
+  </details>
 
-  <div class="card" id="weightCard" hidden>
-    <h2>ウエイト<small>種目を選んで重量・回数・セットを入れる</small></h2>
-    <div class="chips" id="gEx" role="group" aria-label="ウエイトの種目"></div>
-    <label class="f">種目名<input id="gName" maxlength="30" value="スクワット"></label>
-    <div class="row">
-      <label class="f w-m">重量 (kg)<input class="num" id="gKg" inputmode="decimal" maxlength="30" placeholder="例：100 / 80-90-100"></label>
-      <div class="f">回数
-        <div class="stepper"><button type="button" data-gstep="reps" data-d="-1" aria-label="回数を減らす">−</button><span class="num" id="gReps">5</span><button type="button" data-gstep="reps" data-d="1" aria-label="回数を増やす">＋</button></div>
+  <!-- ウエイト -->
+  <details class="card" id="weightCard">
+    <summary><h2>ウエイト <small id="weightCount"></small></h2></summary>
+    <div class="stack mt8">
+      <div class="chips" id="gEx" role="group" aria-label="ウエイトの種目"></div>
+      <label class="f">種目名<input id="gName" maxlength="30" value="スクワット"></label>
+      <div class="row">
+        <label class="f w-m">重量 (kg)<input class="num" id="gKg" inputmode="decimal" maxlength="30" placeholder="例：100 / 80-90-100"></label>
+        <div class="f">回数
+          <div class="stepper"><button type="button" data-gstep="reps" data-d="-1" aria-label="回数を減らす">−</button><span class="num" id="gReps">5</span><button type="button" data-gstep="reps" data-d="1" aria-label="回数を増やす">＋</button></div>
+        </div>
+        <div class="f">セット
+          <div class="stepper"><button type="button" data-gstep="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="gSets">3</span><button type="button" data-gstep="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+        </div>
       </div>
-      <div class="f">セット
-        <div class="stepper"><button type="button" data-gstep="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="gSets">3</span><button type="button" data-gstep="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+      <label class="f">メモ（任意）<input id="gNote" maxlength="60" placeholder="例：RPE8、フォーム重視、片脚ずつ"></label>
+      <div class="row">
+        <button type="button" class="btn primary grow" id="gAdd">ウエイトを追加</button>
       </div>
+      <div id="weightList" class="stack"></div>
     </div>
-    <label class="f">メモ（任意）<input id="gNote" maxlength="60" placeholder="例：RPE8、フォーム重視、片脚ずつ"></label>
-    <div class="row">
-      <button type="button" class="btn primary grow" id="gAdd">ウエイトを追加</button>
+  </details>
+
+  <!-- その他の練習 -->
+  <details class="card" id="extraCard">
+    <summary><h2>その他の練習 <small id="extraCount"></small></h2></summary>
+    <div class="stack mt8">
+      <div class="chips" id="oCat" role="group" aria-label="練習の種類"></div>
+      <div class="chips" id="oPlyo" role="group" aria-label="プライオ・跳躍の種目" hidden></div>
+      <label class="f" id="oNameWrap"><span id="oNameLabel">内容（任意）</span><input id="oName" maxlength="30"></label>
+      <div class="row" id="oAmtRow">
+        <label class="f grow" id="oAmtWrap"><span id="oAmtLabel">量</span><input class="num" id="oAmt" maxlength="20"></label>
+        <div class="f" id="oSetsWrap">セット
+          <div class="stepper"><button type="button" data-ostep="-1" aria-label="セットを減らす">−</button><span class="num" id="oSets">1</span><button type="button" data-ostep="1" aria-label="セットを増やす">＋</button></div>
+        </div>
+      </div>
+      <div class="chips" id="oAmtChips" role="group" aria-label="量をすぐ選ぶ"></div>
+      <div class="row">
+        <button type="button" class="btn primary grow" id="oAdd">追加</button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn small grow" id="oUseTpl">いつものセットを入れる</button>
+        <button type="button" class="btn small grow" id="oSaveTpl">今の内容をいつものセットに登録</button>
+      </div>
+      <p class="hint" id="oTplInfo"></p>
+      <div id="extraList" class="stack"></div>
     </div>
-    <div id="weightList" class="stack"></div>
-  </div>
+  </details>
 
   <div class="card">
     <h2>天気とコンディション</h2>
@@ -105,10 +209,13 @@
       <label class="f w-s">気温 (℃)<input class="num" id="fTemp" inputmode="decimal" placeholder="—" maxlength="5"></label>
       <label class="f grow">風・グラウンド<input id="fWind" maxlength="80" placeholder="例：北風 3.0m/s、走路ぬれ"></label>
     </div>
-    <div class="row">
-      <label class="f grow">きつさ RPE <span class="num rpe" id="fRpeV">6</span><input type="range" id="fRpe" min="1" max="10" value="6"></label>
+    <div class="f">疲労度（練習後のきつさ） <span class="num rpe" id="fFatV">—</span>
+      <div class="chips" id="fFat" role="group" aria-label="疲労度"></div>
+      <span class="hint">目安：3 楽／5 きつい／7 かなりきつい／9 ほぼ限界／10 限界</span>
     </div>
-    <div class="chips" id="fCond" role="group" aria-label="調子"></div>
+    <div class="f">調子（練習前の体の状態）
+      <div class="chips" id="fCond" role="group" aria-label="調子"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -121,7 +228,7 @@
     <div class="chips" id="pOpts" role="group" aria-label="投稿に入れるもの">
       <button type="button" class="chip" data-k="menu" aria-pressed="true">メニュー</button>
       <button type="button" class="chip" data-k="body" aria-pressed="true">日記</button>
-      <button type="button" class="chip" data-k="cond" aria-pressed="false">調子・天気</button>
+      <button type="button" class="chip" data-k="cond" aria-pressed="false">天気・疲労度</button>
       <button type="button" class="chip" data-k="tags" aria-pressed="true">ハッシュタグ</button>
     </div>
     <label class="f">ハッシュタグ<input id="pTags" value="#陸上 #短距離" maxlength="100"></label>
@@ -150,20 +257,24 @@
     <div class="row"><button type="button" class="btn primary grow" id="exportBtn2">今すぐ書き出す</button></div>
   </div>
   <div class="card">
-    <h2>まとめ</h2>
+    <h2>今週のまとめ</h2>
     <div class="stats">
-      <div class="stat"><div class="v num" id="sWeek">0</div><div class="k">今週の練習日</div></div>
-      <div class="stat"><div class="v num" id="sDist">0</div><div class="k">今週の走行距離 (m)</div></div>
-      <div class="stat"><div class="v num" id="sTotal">0</div><div class="k">記録した日数</div></div>
+      <div class="stat"><div class="v num" id="sWeek">0</div><div class="k">練習した日</div></div>
+      <div class="stat"><div class="v num" id="sStrong">0</div><div class="k">強度「強」の日</div></div>
+      <div class="stat"><div class="v num" id="sDist">0</div><div class="k">走った距離 (m)</div></div>
     </div>
   </div>
   <div class="card">
     <h2>自己記録<small>PB・SB（<span id="sbYear"></span>年）</small></h2>
     <div class="tablewrap"><table id="pbTable"><thead><tr><th>種目</th><th>PB</th><th>SB</th></tr></thead><tbody></tbody></table></div>
-    <p class="hint" id="pbEmpty">試合の記録を下から入れると、種目ごとのPBとSBが出ます。</p>
-    <p class="hint">PB・SBは電気計時で、100m・200mは追い風2.0m/s以下の記録から選びます。追い風参考や手動計時の記録は、より速いときだけ参考として下に出します。</p>
+    <p class="hint" id="pbEmpty">試合結果を日記に入れるか、下から記録を入れると、種目ごとのPBとSBが出ます。</p>
+    <p class="hint">PB・SBは電気計時で、100m・200mなどは追い風2.0m/s以下の記録から選びます。追い風参考や手動計時の記録は、より速いときだけ参考として出します。</p>
+    <div id="relayBox" hidden>
+      <h3>リレー（チームのベスト）</h3>
+      <div class="tablewrap"><table id="relayTable"><thead><tr><th>種目</th><th>ベスト</th><th>大会・走順</th></tr></thead><tbody></tbody></table></div>
+    </div>
     <details id="recBox">
-      <summary>記録を追加する</summary>
+      <summary>過去の記録を手で追加する</summary>
       <div class="stack mt8">
         <div class="chips" id="rEvent" role="group" aria-label="種目"></div>
         <div class="row">
@@ -185,9 +296,8 @@
     <div id="recList" class="stack"></div>
   </div>
   <div class="card">
-    <h2>練習ベスト<small>日記のメニューに入れたタイムから</small></h2>
-    <div class="tablewrap"><table id="bestTable"><thead><tr><th>距離</th><th>電気計時</th><th>手動計時</th></tr></thead><tbody></tbody></table></div>
-    <p class="hint" id="bestEmpty">タイムを入れて保存すると、ここに距離ごとのベストが出ます。</p>
+    <h2>練習ベスト<small>ランメニューごと。1本のベストと平均のベスト</small></h2>
+    <div id="pracBest" class="stack gap12"></div>
   </div>
   <div class="card">
     <h2>日記一覧</h2>
