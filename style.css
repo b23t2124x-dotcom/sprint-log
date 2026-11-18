@@ -127,3 +127,6 @@ details.card > summary h2{display:inline}
 .btn.off{color:var(--muted);border-style:dashed}
 .pbrow{display:flex;gap:8px;align-items:flex-start}
 .pill.int{color:var(--accent);border-color:currentColor}
+.btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.menuitem.isup{border-style:dashed}
+.menuitem .t .pill{font-size:11px;padding:0 8px;margin-right:2px}

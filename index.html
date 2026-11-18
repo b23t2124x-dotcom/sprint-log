@@ -27,8 +27,39 @@
     <h2 id="formTitle">今日の練習</h2>
     <div class="row">
       <label class="f grow">日付<input type="date" id="fDate"></label>
-      <label class="f w-time">練習した時刻<input type="time" id="fTime" step="3600"></label>
     </div>
+    <div class="row">
+      <label class="f w-time">開始<input type="time" id="fTime" step="900"></label>
+      <label class="f w-time">終了<input type="time" id="fTimeEnd" step="900"></label>
+    </div>
+    <div class="f">会場
+      <div class="chips" id="fVenue" role="group" aria-label="会場"></div>
+    </div>
+    <div class="f">練習会（いつもと違うときだけ）
+      <div class="chips" id="fSession" role="group" aria-label="練習会"></div>
+    </div>
+    <details id="venueBox">
+      <summary>会場・練習会を登録する</summary>
+      <div class="stack mt8">
+        <h3>会場</h3>
+        <label class="f">会場の名前<input id="vName" maxlength="40" placeholder="例：鳥取大学グラウンド"></label>
+        <p class="hint" id="vLocInfo">場所：なし（天気は「天気を取る場所」で取得します）</p>
+        <div class="row">
+          <button type="button" class="btn small grow" id="vGeo">今いる場所にする</button>
+          <label class="f grow"><input id="vQ" maxlength="40" placeholder="地名で探す（例：鳥取市）" aria-label="会場の場所を地名で探す"></label>
+          <button type="button" class="btn small" id="vSearch">検索</button>
+        </div>
+        <div id="vResults" class="stack"></div>
+        <div class="row"><button type="button" class="btn primary grow" id="vAdd">会場を登録</button></div>
+        <div id="vList" class="stack"></div>
+        <h3>練習会</h3>
+        <div class="row">
+          <label class="f grow">練習会の名前<input id="sName" maxlength="40" placeholder="例：合同練習、○○クラブ練習会"></label>
+          <button type="button" class="btn self-end" id="sAdd">登録</button>
+        </div>
+        <div id="sList" class="stack"></div>
+      </div>
+    </details>
     <div class="f">強度（この日の練習の狙い）
       <div class="chips" id="fInt" role="group" aria-label="強度">
         <button type="button" class="chip" data-v="弱" aria-pressed="false">弱</button>
@@ -165,6 +196,10 @@
       <div class="chips" id="oCat" role="group" aria-label="練習の種類"></div>
       <div class="chips" id="oPlyo" role="group" aria-label="プライオ・跳躍の種目" hidden></div>
       <label class="f" id="oNameWrap"><span id="oNameLabel">内容（任意）</span><input id="oName" maxlength="30"></label>
+      <div class="row" id="oPmRow" hidden>
+        <label class="f w-s">負荷 (kp)<input class="num" id="oKp" inputmode="decimal" maxlength="6" placeholder="例：7.5"></label>
+        <label class="f w-s">最大 (W)<input class="num" id="oWatt" inputmode="numeric" maxlength="5" placeholder="任意"></label>
+      </div>
       <div class="row" id="oAmtRow">
         <label class="f grow" id="oAmtWrap"><span id="oAmtLabel">量</span><input class="num" id="oAmt" maxlength="20"></label>
         <div class="f" id="oSetsWrap">セット
@@ -172,6 +207,7 @@
         </div>
       </div>
       <div class="chips" id="oAmtChips" role="group" aria-label="量をすぐ選ぶ"></div>
+      <label class="f">メモ（任意）<input id="oMemo" maxlength="60" placeholder="例：回転重視、左脚に張り"></label>
       <div class="row">
         <button type="button" class="btn primary grow" id="oAdd">追加</button>
       </div>
@@ -183,6 +219,19 @@
       <div id="extraList" class="stack"></div>
     </div>
   </details>
+
+  <!-- 練習の流れ -->
+  <div class="card" id="flowCard">
+    <h2>練習の流れ<small>投稿と記録はこの順番。↑↓で入れ替え</small></h2>
+    <div id="flowList" class="stack"></div>
+    <div class="f" id="upModeWrap">アップの書き方（投稿文）
+      <div class="chips" id="upMode" role="group" aria-label="アップの書き方">
+        <button type="button" class="chip" data-v="short" aria-pressed="true">「アップ」だけ</button>
+        <button type="button" class="chip" data-v="detail" aria-pressed="false">アップ（中身も書く）</button>
+      </div>
+    </div>
+    <p class="hint">「アップ」を押した項目は、投稿文で1つにまとめます。アップのランは練習ベストに入れません。</p>
+  </div>
 
   <div class="card">
     <h2>天気とコンディション</h2>
@@ -229,6 +278,7 @@
       <button type="button" class="chip" data-k="menu" aria-pressed="true">メニュー</button>
       <button type="button" class="chip" data-k="body" aria-pressed="true">日記</button>
       <button type="button" class="chip" data-k="cond" aria-pressed="false">天気・疲労度</button>
+      <button type="button" class="chip" data-k="venue" aria-pressed="false">会場・練習会</button>
       <button type="button" class="chip" data-k="tags" aria-pressed="true">ハッシュタグ</button>
     </div>
     <label class="f">ハッシュタグ<input id="pTags" value="#陸上 #短距離" maxlength="100"></label>
