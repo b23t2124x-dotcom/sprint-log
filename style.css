@@ -130,3 +130,13 @@ details.card > summary h2{display:inline}
 .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .menuitem.isup{border-style:dashed}
 .menuitem .t .pill{font-size:11px;padding:0 8px;margin-right:2px}
+/* 日付・時刻の入力欄：iPhone の Safari で枠からはみ出さないようにする */
+label.f,div.f{min-width:0}
+input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;height:44px;line-height:24px;padding:9px 10px;text-align:left;font-variant-numeric:tabular-nums}
+input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left;margin:0;min-height:24px}
+input[type="date"]::-webkit-calendar-picker-indicator,input[type="time"]::-webkit-calendar-picker-indicator{margin-left:2px;opacity:.6}
+.grid3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.grid3 > :first-child{grid-column:1 / -1}
+@media (min-width:560px){.grid3{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)}.grid3 > :first-child{grid-column:auto}}
+header.top h1{white-space:nowrap;min-width:0}
+@media (max-width:360px){header.top h1{font-size:15px}header.top .pill{font-size:11px;padding:2px 8px}}
