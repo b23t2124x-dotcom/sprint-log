@@ -71,3 +71,4 @@ input[type="range"]{padding:0;accent-color:var(--accent)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
 @media (prefers-reduced-motion: reduce){.clock,.toast{transition:none}}
+html,button,.chip,.btn,a{touch-action:manipulation}

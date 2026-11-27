@@ -513,6 +513,27 @@ function updateCount() {
 function xUrl(text) { return "https://x.com/intent/post?text=" + encodeURIComponent(text); }
 function updateXLink() { $("#xBtn").href = xUrl($("#pText").value); }
 
+// ±の間の数字を押すとキーボードで書き換えられるようにする
+function bindStepInput(sel, lo, hi, apply) {
+  const el = $(sel);
+  let last = Number(el.value) || lo;
+  const read = (commit) => {
+    const v = Math.round(Number(toHalf(el.value)));
+    if (isFinite(v) && v >= lo && v <= hi) { if (v !== last) { last = v; apply(v); } if (commit) el.value = v; }
+    else if (commit) { el.value = last; if (el.value !== "" && toHalf(el.value) !== "") toast(lo + "〜" + hi + "の数字を入れてください"); }
+  };
+  // 押したら全体を選んで、すぐ打ち直せるようにする
+  const selAll = () => { try { el.setSelectionRange(0, el.value.length); } catch (e) { el.select(); } };
+  el.addEventListener("focus", () => { last = Number(el.value) || last; selAll(); setTimeout(selAll, 0); });
+  el.addEventListener("mouseup", (e) => e.preventDefault()); // クリック直後に選択が外れないように
+  el.addEventListener("input", () => read(false));
+  el.addEventListener("change", () => read(true));
+  el.addEventListener("blur", () => read(true));
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
+  // ±ボタンで変わったときも、覚えている値を合わせる
+  el.closest(".stepper").addEventListener("click", () => { last = Number(el.value) || last; });
+}
+
 // 並べ替え・削除つきの一覧（ラン・ウエイト・その他・試合で共通）
 function renderItemList(el, items, lineFn, onChange, extraBtn, noMove) {
   el.innerHTML = items.map((it, i) => `<div class="menuitem"><span class="t num">${esc(lineFn(it, i))}</span>${extraBtn ? extraBtn(it, i) : ""}${noMove ? "" : `<button type="button" class="btn small" data-i="${i}" data-act="up" aria-label="上へ" ${i === 0 ? "disabled" : ""}>↑</button>`}<button type="button" class="btn small danger" data-i="${i}" data-act="del">削除</button></div>`).join("");
@@ -548,11 +569,13 @@ function buildRun() {
   });
   $("#mPlus").addEventListener("click", () => { const inp = $("#mDistIn"); if (!/\+\s*$/.test(inp.value)) inp.value = inp.value.trim() + "+"; inp.focus(); });
   $("#mDistIn").addEventListener("input", onDistInput);
+  bindStepInput("#mReps", 1, 20, (v) => { M.reps = v; renderTimeInputs(); });
+  bindStepInput("#mSets", 1, 6, (v) => { M.sets = v; renderTimeInputs(); });
   $$("[data-step]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.step;
     M[k] = Math.max(1, Math.min(k === "reps" ? 20 : 6, M[k] + Number(b.dataset.d)));
-    $("#mReps").textContent = M.reps;
-    $("#mSets").textContent = M.sets;
+    $("#mReps").value = M.reps;
+    $("#mSets").value = M.sets;
     renderTimeInputs();
   }));
   $("#mLinkChips").innerHTML = chipsHTML(LINKS, "");
@@ -607,10 +630,12 @@ function buildWeight() {
   const ex = $("#gEx");
   ex.innerHTML = chipsHTML(WEIGHT_EX, "スクワット");
   chipGroup(ex, (v) => { $("#gName").value = v === "その他" ? "" : v; if (v === "その他") $("#gName").focus(); });
+  bindStepInput("#gReps", 1, 100, (v) => { G.reps = v; });
+  bindStepInput("#gSets", 1, 20, (v) => { G.sets = v; });
   $$("[data-gstep]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.gstep;
     G[k] = Math.max(1, Math.min(k === "reps" ? 100 : 20, G[k] + Number(b.dataset.d)));
-    $("#gReps").textContent = G.reps; $("#gSets").textContent = G.sets;
+    $("#gReps").value = G.reps; $("#gSets").value = G.sets;
   }));
   $("#gAdd").addEventListener("click", () => {
     const g = sanitizeWeight({ name: $("#gName").value.trim(), kg: toHalf($("#gKg").value).trim().replace(/\s+/g, ""), reps: G.reps, sets: G.sets, note: $("#gNote").value.trim() });
@@ -642,7 +667,8 @@ function buildExtra() {
   op.innerHTML = chipsHTML(PLYO, "バウンディング");
   chipGroup(op, (v) => { $("#oName").value = v === "その他" ? "" : v; if (v === "その他") $("#oName").focus(); });
   $("#oAmtChips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) $("#oAmt").value = b.dataset.v; });
-  $$("[data-ostep]").forEach((b) => b.addEventListener("click", () => { O.sets = Math.max(1, Math.min(20, O.sets + Number(b.dataset.ostep))); $("#oSets").textContent = O.sets; }));
+  $$("[data-ostep]").forEach((b) => b.addEventListener("click", () => { O.sets = Math.max(1, Math.min(20, O.sets + Number(b.dataset.ostep))); $("#oSets").value = O.sets; }));
+  bindStepInput("#oSets", 1, 20, (v) => { O.sets = v; });
   $("#oAdd").addEventListener("click", () => {
     const ui = OCAT_UI[O.cat];
     const name = ui.name ? $("#oName").value.trim() : "";

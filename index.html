@@ -137,10 +137,10 @@
       </div>
       <div class="row">
         <div class="f">本数
-          <div class="stepper"><button type="button" data-step="reps" data-d="-1" aria-label="本数を減らす">−</button><span class="num" id="mReps">3</span><button type="button" data-step="reps" data-d="1" aria-label="本数を増やす">＋</button></div>
+          <div class="stepper"><button type="button" data-step="reps" data-d="-1" aria-label="本数を減らす">−</button><input class="num stepnum" id="mReps" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="3" aria-label="本数（1〜20）"><button type="button" data-step="reps" data-d="1" aria-label="本数を増やす">＋</button></div>
         </div>
         <div class="f">セット
-          <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="mSets">1</span><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+          <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><input class="num stepnum" id="mSets" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="1" aria-label="セット数（1〜6）"><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
         </div>
       </div>
       <div class="stack" id="mLinkWrap" hidden>
@@ -173,10 +173,10 @@
       <div class="row">
         <label class="f w-m">重量 (kg)<input class="num" id="gKg" inputmode="decimal" maxlength="30" placeholder="例：100 / 80-90-100"></label>
         <div class="f">回数
-          <div class="stepper"><button type="button" data-gstep="reps" data-d="-1" aria-label="回数を減らす">−</button><span class="num" id="gReps">5</span><button type="button" data-gstep="reps" data-d="1" aria-label="回数を増やす">＋</button></div>
+          <div class="stepper"><button type="button" data-gstep="reps" data-d="-1" aria-label="回数を減らす">−</button><input class="num stepnum" id="gReps" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="5" aria-label="回数（1〜100）"><button type="button" data-gstep="reps" data-d="1" aria-label="回数を増やす">＋</button></div>
         </div>
         <div class="f">セット
-          <div class="stepper"><button type="button" data-gstep="sets" data-d="-1" aria-label="セットを減らす">−</button><span class="num" id="gSets">3</span><button type="button" data-gstep="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+          <div class="stepper"><button type="button" data-gstep="sets" data-d="-1" aria-label="セットを減らす">−</button><input class="num stepnum" id="gSets" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="3" aria-label="セット数（1〜20）"><button type="button" data-gstep="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
         </div>
       </div>
       <label class="f">メモ（任意）<input id="gNote" maxlength="60" placeholder="例：RPE8、フォーム重視、片脚ずつ"></label>
@@ -201,7 +201,7 @@
       <div class="row" id="oAmtRow">
         <label class="f grow" id="oAmtWrap"><span id="oAmtLabel">量</span><input class="num" id="oAmt" maxlength="20"></label>
         <div class="f" id="oSetsWrap">セット
-          <div class="stepper"><button type="button" data-ostep="-1" aria-label="セットを減らす">−</button><span class="num" id="oSets">1</span><button type="button" data-ostep="1" aria-label="セットを増やす">＋</button></div>
+          <div class="stepper"><button type="button" data-ostep="-1" aria-label="セットを減らす">−</button><input class="num stepnum" id="oSets" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="1" aria-label="セット数（1〜20）"><button type="button" data-ostep="1" aria-label="セットを増やす">＋</button></div>
         </div>
       </div>
       <div class="chips" id="oAmtChips" role="group" aria-label="量をすぐ選ぶ"></div>
