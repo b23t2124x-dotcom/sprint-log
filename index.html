@@ -140,7 +140,7 @@
           <div class="stepper"><button type="button" data-step="reps" data-d="-1" aria-label="本数を減らす">−</button><input class="num stepnum" id="mReps" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="3" aria-label="本数（1〜20）"><button type="button" data-step="reps" data-d="1" aria-label="本数を増やす">＋</button></div>
         </div>
         <div class="f">セット
-          <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><input class="num stepnum" id="mSets" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="1" aria-label="セット数（1〜6）"><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
+          <div class="stepper"><button type="button" data-step="sets" data-d="-1" aria-label="セットを減らす">−</button><input class="num stepnum" id="mSets" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="1" aria-label="セット数（1〜20）"><button type="button" data-step="sets" data-d="1" aria-label="セットを増やす">＋</button></div>
         </div>
       </div>
       <div class="stack" id="mLinkWrap" hidden>
@@ -151,11 +151,17 @@
         <label class="f w-m">r 本数間 (分)<input class="num" id="mRest" inputmode="decimal" value="3" maxlength="8"></label>
         <label class="f w-m" id="mSetRestWrap">R セット間 (分)<input class="num" id="mSetRest" inputmode="decimal" value="8" maxlength="8"></label>
       </div>
-      <div class="chips" id="mTiming" role="group" aria-label="計時">
-        <button type="button" class="chip" data-v="hand" aria-pressed="true">手動計時</button>
-        <button type="button" class="chip" data-v="elec" aria-pressed="false">電気計時</button>
+      <div class="chips" role="group" aria-label="タイム">
+        <button type="button" class="chip" id="mWithTime" aria-pressed="false">タイムを入れる</button>
       </div>
-      <div class="times" id="mTimes"></div>
+      <p class="hint" id="mTimeNote" hidden>タイムを入れられるのは、本数×セットが20本までのメニューです。</p>
+      <div class="stack" id="mTimeWrap" hidden>
+        <div class="chips" id="mTiming" role="group" aria-label="計時">
+          <button type="button" class="chip" data-v="hand" aria-pressed="true">手動計時</button>
+          <button type="button" class="chip" data-v="elec" aria-pressed="false">電気計時</button>
+        </div>
+        <div class="times" id="mTimes"></div>
+      </div>
       <label class="f">メモ（任意）<input id="mNote" maxlength="100" placeholder="例：スパイク、坂、向かい風"></label>
       <div class="row">
         <button type="button" class="btn primary grow" id="mAdd">ランメニューに追加</button>

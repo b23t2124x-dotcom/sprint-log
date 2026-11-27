@@ -161,7 +161,7 @@ function sanitizeRun(m) {
   let segs = Array.isArray(m.segs) ? m.segs : (m.dist != null ? [m.dist] : []);
   segs = segs.slice(0, 6).map((x) => numIn(x, 1, 50000)).filter((x) => x != null).map(Math.round);
   if (!segs.length) return null;
-  const reps = Math.round(numIn(m.reps, 1, 20) || 1), sets = Math.round(numIn(m.sets, 1, 6) || 1);
+  const reps = Math.round(numIn(m.reps, 1, 20) || 1), sets = Math.round(numIn(m.sets, 1, 20) || 1);
   const times = Array.isArray(m.times) ? m.times.slice(0, 120).map((t) =>
     Array.isArray(t) ? segs.map((_, k) => timeOrNull(t[k])) : (segs.length === 1 ? [timeOrNull(t)] : segs.map(() => null))) : [];
   return {
@@ -418,7 +418,7 @@ function buildDiary() {
     try { await navigator.clipboard.writeText($("#pText").value); toast("コピーしました"); }
     catch (e) { $("#pText").select(); toast("選択しました。長押しでコピーしてください"); }
   });
-  $("#newBtn").addEventListener("click", () => { loadForm(blankEntry()); window.scrollTo(0, 0); });
+  $("#newBtn").addEventListener("click", () => { M.withTime = false; renderTimeInputs(); loadForm(blankEntry()); window.scrollTo(0, 0); });
   const pp = lsGet(LS_POST, null);
   if (pp && typeof pp === "object") {
     $$("#pOpts .chip").forEach((c) => { if (typeof pp[c.dataset.k] === "boolean") c.setAttribute("aria-pressed", pp[c.dataset.k] ? "true" : "false"); });
@@ -547,7 +547,8 @@ function renderItemList(el, items, lineFn, onChange, extraBtn, noMove) {
 }
 
 /* ---------- ランメニュー ---------- */
-const M = { segs: [150], reps: 3, sets: 1, timing: "hand", kind: "" };
+const M = { segs: [150], reps: 3, sets: 1, timing: "hand", kind: "", withTime: false };
+const TIME_MAX = 20; // タイムを入れられるのは本数×セットがこの本数まで
 function parseSegs(s) {
   const parts = toHalf(s).replace(/[＋]/g, "+").split("+").map((p) => p.trim()).filter(Boolean);
   const segs = parts.slice(0, 6).map((p) => Math.round(Number(p.replace(/m$/i, ""))));
@@ -569,11 +570,12 @@ function buildRun() {
   });
   $("#mPlus").addEventListener("click", () => { const inp = $("#mDistIn"); if (!/\+\s*$/.test(inp.value)) inp.value = inp.value.trim() + "+"; inp.focus(); });
   $("#mDistIn").addEventListener("input", onDistInput);
+  $("#mWithTime").addEventListener("click", () => { M.withTime = !M.withTime; renderTimeInputs(); });
   bindStepInput("#mReps", 1, 20, (v) => { M.reps = v; renderTimeInputs(); });
-  bindStepInput("#mSets", 1, 6, (v) => { M.sets = v; renderTimeInputs(); });
+  bindStepInput("#mSets", 1, 20, (v) => { M.sets = v; renderTimeInputs(); });
   $$("[data-step]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.step;
-    M[k] = Math.max(1, Math.min(k === "reps" ? 20 : 6, M[k] + Number(b.dataset.d)));
+    M[k] = Math.max(1, Math.min(20, M[k] + Number(b.dataset.d)));
     $("#mReps").value = M.reps;
     $("#mSets").value = M.sets;
     renderTimeInputs();
@@ -590,7 +592,16 @@ function onDistInput() {
   setChip($("#mDist"), one == null ? "" : String(one));
   if (segs && segsStr(segs) !== segsStr(M.segs)) { M.segs = segs; renderTimeInputs(); }
 }
+function timeOn() { return M.withTime && M.reps * M.sets <= TIME_MAX; }
 function renderTimeInputs() {
+  const over = M.reps * M.sets > TIME_MAX;
+  $("#mWithTime").setAttribute("aria-pressed", String(M.withTime));
+  $("#mWithTime").disabled = over;
+  $("#mTimeNote").hidden = !over;
+  $("#mTimeWrap").hidden = !timeOn();
+  $("#mSetRestWrap").hidden = M.sets < 2;
+  $("#mLinkWrap").hidden = M.segs.length < 2;
+  if (!timeOn()) { $("#mTimes").innerHTML = ""; return; }
   const old = {};
   $$("#mTimes input").forEach((i) => { old[i.id] = i.value; });
   const multi = M.segs.length > 1;
@@ -611,7 +622,7 @@ function addMenu() {
   const segs = parseSegs($("#mDistIn").value);
   if (!segs) { toast("距離を 150 や 250+50 のように入れてください"); return; }
   M.segs = segs;
-  const n = M.reps * M.sets;
+  const n = timeOn() ? M.reps * M.sets : 0; // タイムを入れないときは空
   const times = [];
   for (let k = 0; k < n; k++) times.push(segs.map((_, j) => { const el = $(`#mt${k}_${j}`); const v = el ? parseTime(el.value) : NaN; return isFinite(v) ? Math.round(v * 100) / 100 : null; }));
   const item = sanitizeRun({ segs, reps: M.reps, sets: M.sets, times, kind: M.kind, kindName: $("#mKindName").value.trim(), link: segs.length > 1 ? $("#mLink").value.trim() : "", rest: toHalf($("#mRest").value).trim(), setRest: M.sets > 1 ? toHalf($("#mSetRest").value).trim() : "", timing: M.timing, note: $("#mNote").value.trim() });
