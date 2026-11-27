@@ -34,15 +34,8 @@ function sanitizeCfg(c) {
   return out;
 }
 let CFG = sanitizeCfg(lsGet(LS_CFG, null));
-function parseSec(s) {
-  s = String(s).replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[：]/g, ":").trim();
-  if (!s) return NaN;
-  if (s.includes(":")) { const [m, r] = s.split(":"); return Number(m) * 60 + Number(r); }
-  return Number(s);
-}
 function fmtSec(sec) { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60), s = sec % 60; return m + ":" + String(s).padStart(2, "0"); }
 function fmtBig(sec, segDur) { return segDur >= 60 ? fmtSec(sec) : String(Math.max(0, sec)); }
-const TIME_KEYS = ["work", "rest", "setRest", "prep"];
 
 /* ---------- 流れ（区間の並び）を作る ---------- */
 const NAMES = { prep: "準備", work: "ワーク", rest: "レスト", setrest: "セット間レスト", done: "終了" };
@@ -224,10 +217,75 @@ function render() {
   if (i !== T.lastIdx) { if (T.lastIdx >= 0 && navigator.vibrate) navigator.vibrate(x.type === "work" ? 400 : 200); T.lastIdx = i; }
 }
 
-/* ---------- 設定画面 ---------- */
+/* ---------- ドラム（リール）式の数字選び ---------- */
+const ITEM_H = 40; // 1行の高さ（timer.css の .wheel li と合わせる）
+function range(lo, hi) { const a = []; for (let i = lo; i <= hi; i++) a.push(i); return a; }
+// el にドラムを作る。values から1つ選ぶと onPick(値) を呼ぶ
+function makeWheel(el, values, onPick) {
+  el.setAttribute("role", "listbox");
+  el.setAttribute("tabindex", "0");
+  el.setAttribute("aria-label", (el.closest(".field").querySelector("span").textContent || "") + "（" + el.dataset.unit + "）");
+  el.innerHTML = `<ul>${values.map((v) => `<li role="option" class="num">${v}</li>`).join("")}</ul>`;
+  const u = document.createElement("span");
+  u.className = "unit"; u.textContent = el.dataset.unit; u.setAttribute("aria-hidden", "true");
+  el.after(u);
+  const items = Array.from(el.querySelectorAll("li"));
+  let idx = 0, quiet = false, timer = 0;
+  const mark = (i) => { items.forEach((li, k) => { li.classList.toggle("sel", k === i); li.setAttribute("aria-selected", String(k === i)); }); };
+  const settle = () => {
+    const i = Math.max(0, Math.min(values.length - 1, Math.round(el.scrollTop / ITEM_H)));
+    mark(i);
+    if (i !== idx) { idx = i; if (!quiet) onPick(values[i]); }
+    quiet = false;
+  };
+  el.addEventListener("scroll", () => {
+    mark(Math.round(el.scrollTop / ITEM_H));
+    clearTimeout(timer);
+    timer = setTimeout(settle, 120); // 止まったら値を決める
+  }, { passive: true });
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    const i = Math.max(0, Math.min(values.length - 1, idx + (e.key === "ArrowDown" ? 1 : -1)));
+    el.scrollTo({ top: i * ITEM_H, behavior: "smooth" });
+  });
+  items.forEach((li, i) => li.addEventListener("click", () => el.scrollTo({ top: i * ITEM_H, behavior: "smooth" })));
+  return {
+    set(v) {
+      let i = values.indexOf(v);
+      if (i < 0) i = values.reduce((b, x, k) => (Math.abs(x - v) < Math.abs(values[b] - v) ? k : b), 0);
+      if (i === idx && Math.round(el.scrollTop / ITEM_H) === i) { mark(i); return; }
+      idx = i; quiet = true;
+      el.scrollTop = i * ITEM_H;
+      mark(i);
+    },
+  };
+}
+const W = {};
+function buildWheels() {
+  // 時間は「分」と「秒」の2列
+  ["work", "rest", "setRest"].forEach((k) => {
+    const pick = () => {
+      let v = W[k + "m"].val * 60 + W[k + "s"].val;
+      v = clampInt(v, LIMITS[k]);
+      CFG[k] = v; applyCfg(true);
+      if (v !== W[k + "m"].val * 60 + W[k + "s"].val) fillForm(); // 範囲外（ワーク0秒、60分超え）は直してドラムも合わせる
+    };
+    W[k + "m"] = { val: 0 }; W[k + "s"] = { val: 0 };
+    W[k + "m"].w = makeWheel($(`#w-${k}-m`), range(0, 60), (v) => { W[k + "m"].val = v; pick(); });
+    W[k + "s"].w = makeWheel($(`#w-${k}-s`), range(0, 59), (v) => { W[k + "s"].val = v; pick(); });
+  });
+  W.rounds = makeWheel($("#w-rounds"), range(1, 99), (v) => { CFG.rounds = v; applyCfg(true); });
+  W.sets = makeWheel($("#w-sets"), range(1, 20), (v) => { CFG.sets = v; applyCfg(true); });
+  W.prep = makeWheel($("#w-prep"), range(0, 60), (v) => { CFG.prep = v; applyCfg(true); });
+}
 function fillForm() {
-  TIME_KEYS.forEach((k) => { $("#" + k).value = CFG[k] >= 60 && k !== "prep" ? fmtSec(CFG[k]) : String(CFG[k]); });
-  $("#rounds").value = CFG.rounds; $("#sets").value = CFG.sets;
+  ["work", "rest", "setRest"].forEach((k) => {
+    const m = Math.min(60, Math.floor(CFG[k] / 60)), sec = CFG[k] - m * 60;
+    W[k + "m"].val = m; W[k + "s"].val = Math.min(59, sec);
+    W[k + "m"].w.set(m); W[k + "s"].w.set(Math.min(59, sec));
+  });
+  W.rounds.set(CFG.rounds); W.sets.set(CFG.sets); W.prep.set(CFG.prep);
   $$("#countdown .chip").forEach((c) => c.setAttribute("aria-pressed", String(Number(c.dataset.v) === CFG.countdown)));
   $("#volume").value = CFG.volume;
   $("#setRestField").hidden = CFG.sets < 2;
@@ -236,14 +294,10 @@ function fillForm() {
 function applyCfg(save) {
   if (save) lsSet(LS_CFG, CFG);
   if (!T.started) { T.plan = buildPlan(CFG); render(); }
+  const wasHidden = $("#setRestField").hidden;
   $("#setRestField").hidden = CFG.sets < 2;
+  if (wasHidden && !$("#setRestField").hidden) requestAnimationFrame(fillForm); // 表示されたドラムの位置を合わせる
   renderPresets();
-}
-function readField(k) {
-  const v = TIME_KEYS.includes(k) ? parseSec($("#" + k).value) : Number($("#" + k).value);
-  if (!isFinite(v)) return;
-  CFG[k] = clampInt(v, LIMITS[k]);
-  applyCfg(true);
 }
 function samePreset(p) { return Object.keys(LIMITS).every((k) => p[k] === CFG[k]); }
 function getPresets() {
@@ -271,15 +325,6 @@ function buildSettings() {
     if (!p) return;
     Object.keys(LIMITS).forEach((k) => { CFG[k] = p[k]; });
     fillForm(); applyCfg(true);
-  });
-  $$("[data-k]").forEach((b) => b.addEventListener("click", () => {
-    const k = b.dataset.k;
-    CFG[k] = clampInt(CFG[k] + Number(b.dataset.d), LIMITS[k]);
-    fillForm(); applyCfg(true);
-  }));
-  Object.keys(LIMITS).forEach((k) => {
-    $("#" + k).addEventListener("change", () => { readField(k); fillForm(); });
-    $("#" + k).addEventListener("input", () => readField(k));
   });
   $("#countdown").addEventListener("click", (e) => {
     const b = e.target.closest(".chip");
@@ -310,6 +355,7 @@ function buildSettings() {
   $("#skipBtn").addEventListener("click", skip);
 }
 
+buildWheels();
 buildSettings();
 fillForm();
 render();

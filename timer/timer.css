@@ -49,9 +49,17 @@ body.running #settings{opacity:.45;pointer-events:none}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#0f1720}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
-.stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
-.stepper button{font:inherit;font-size:20px;width:42px;height:44px;border:0;background:transparent;color:var(--ink);cursor:pointer;flex:none}
-.stepper input{flex:1;min-width:0;border:0;background:transparent;text-align:center;font-size:22px;color:var(--ink);padding:0}
+/* ドラム（リール）式：3行見えて、真ん中が選ばれている値 */
+.wheels{position:relative;display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:0 6px;overflow:hidden}
+.wheels::before{content:"";position:absolute;left:4px;right:4px;top:40px;height:40px;border-radius:8px;background:rgba(93,147,239,.16);border:1px solid rgba(93,147,239,.45);pointer-events:none}
+.wheel{position:relative;flex:1;min-width:0;height:120px;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;outline:none;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 30%,#000 70%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 30%,#000 70%,transparent 100%)}
+.wheel::-webkit-scrollbar{display:none}
+.wheel:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);border-radius:8px}
+.wheel ul{list-style:none;margin:0;padding:40px 0}
+.wheel li{height:40px;line-height:40px;text-align:center;font-size:20px;color:var(--muted);scroll-snap-align:center;cursor:pointer}
+.wheel li.sel{color:var(--ink);font-size:26px;font-weight:700}
+.wheels .unit{align-self:center;font-size:12px;color:var(--muted);flex:none;position:relative;z-index:1}
 input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
 input[type="range"]{padding:0;accent-color:var(--accent)}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}

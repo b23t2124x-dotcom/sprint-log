@@ -44,14 +44,14 @@
     <div class="chips" id="presets" role="group" aria-label="プリセット"></div>
 
     <div class="grid">
-      <div class="field"><span>ワーク</span><div class="stepper"><button type="button" data-k="work" data-d="-5" aria-label="ワークを5秒減らす">−</button><input class="num" id="work" inputmode="numeric" maxlength="5" aria-label="ワーク（秒、または分:秒）"><button type="button" data-k="work" data-d="5" aria-label="ワークを5秒増やす">＋</button></div></div>
-      <div class="field"><span>レスト</span><div class="stepper"><button type="button" data-k="rest" data-d="-5" aria-label="レストを5秒減らす">−</button><input class="num" id="rest" inputmode="numeric" maxlength="5" aria-label="レスト（秒、または分:秒）"><button type="button" data-k="rest" data-d="5" aria-label="レストを5秒増やす">＋</button></div></div>
-      <div class="field"><span>ラウンド</span><div class="stepper"><button type="button" data-k="rounds" data-d="-1" aria-label="ラウンドを減らす">−</button><input class="num" id="rounds" inputmode="numeric" maxlength="3" aria-label="ラウンド数"><button type="button" data-k="rounds" data-d="1" aria-label="ラウンドを増やす">＋</button></div></div>
-      <div class="field"><span>セット</span><div class="stepper"><button type="button" data-k="sets" data-d="-1" aria-label="セットを減らす">−</button><input class="num" id="sets" inputmode="numeric" maxlength="2" aria-label="セット数"><button type="button" data-k="sets" data-d="1" aria-label="セットを増やす">＋</button></div></div>
-      <div class="field" id="setRestField"><span>セット間</span><div class="stepper"><button type="button" data-k="setRest" data-d="-15" aria-label="セット間を15秒減らす">−</button><input class="num" id="setRest" inputmode="numeric" maxlength="5" aria-label="セット間（秒、または分:秒）"><button type="button" data-k="setRest" data-d="15" aria-label="セット間を15秒増やす">＋</button></div></div>
-      <div class="field"><span>準備</span><div class="stepper"><button type="button" data-k="prep" data-d="-5" aria-label="準備を5秒減らす">−</button><input class="num" id="prep" inputmode="numeric" maxlength="5" aria-label="準備（秒）"><button type="button" data-k="prep" data-d="5" aria-label="準備を5秒増やす">＋</button></div></div>
+      <div class="field"><span>ワーク</span><div class="wheels"><div class="wheel" id="w-work-m" data-unit="分"></div><div class="wheel" id="w-work-s" data-unit="秒"></div></div></div>
+      <div class="field"><span>レスト</span><div class="wheels"><div class="wheel" id="w-rest-m" data-unit="分"></div><div class="wheel" id="w-rest-s" data-unit="秒"></div></div></div>
+      <div class="field"><span>ラウンド</span><div class="wheels"><div class="wheel" id="w-rounds" data-unit="回"></div></div></div>
+      <div class="field"><span>セット</span><div class="wheels"><div class="wheel" id="w-sets" data-unit="セット"></div></div></div>
+      <div class="field" id="setRestField"><span>セット間レスト</span><div class="wheels"><div class="wheel" id="w-setRest-m" data-unit="分"></div><div class="wheel" id="w-setRest-s" data-unit="秒"></div></div></div>
+      <div class="field"><span>準備</span><div class="wheels"><div class="wheel" id="w-prep" data-unit="秒"></div></div></div>
     </div>
-    <p class="hint">時間は秒（20）か、分:秒（1:30）で入れられます。各セットの最後のラウンドのあとは、レストなしで次へ進みます。</p>
+    <p class="hint">数字を上下にスクロールして選びます。各セットの最後のラウンドのあとは、レストなしで次へ進みます。</p>
 
     <h3>音</h3>
     <div class="chips" id="countdown" role="group" aria-label="カウントダウン音">
