@@ -248,8 +248,8 @@ function restStr(v) { return /^\d+(\.\d+)?$/.test(v) ? v + "分" : v; } // 数�
 function segsStr(segs) { return segs.join("+"); }
 function menuKey(m) { return segsStr(m.segs) + "m"; }
 function kindLabel(m) { return m.kind === "その他" ? (m.kindName || "") : m.kind; }
-function menuLine(m) {
-  const k = kindLabel(m);
+function menuLine(m, cont) {
+  const k = cont ? "" : kindLabel(m); // 同じ種類が続くときは名前を省く
   let s = (k ? k + " " : "") + (m.segs.length > 1 ? `(${segsStr(m.segs)})` : m.segs[0] + "m") + `×${m.reps}${m.sets > 1 ? "×" + m.sets : ""}`;
   // つなぎ／本数間 r／セット間 R
   const inner = [m.segs.length > 1 && m.link ? "つなぎ " + m.link : "", m.rest ? "r" + restStr(m.rest) : "", m.sets > 1 && m.setRest ? "R" + restStr(m.setRest) : ""].filter(Boolean).join("／");
@@ -261,16 +261,18 @@ function menuLine(m) {
   if (m.note) s += " " + m.note;
   return s;
 }
-function weightLine(g) {
+function weightLine(g, cont) {
   const kg = g.kg ? (/^[\d.]+$/.test(g.kg) ? g.kg + "kg" : g.kg + (/kg$/i.test(g.kg) ? "" : "kg")) : "";
+  if (cont) return `${kg || g.name}×${g.reps}×${g.sets}${g.note ? " " + g.note : ""}`; // 同じ種目が続くときは種目名を省く
   return `${g.name}${kg ? " " + kg : ""}×${g.reps}×${g.sets}${g.note ? " " + g.note : ""}`;
 }
-function extraLine(o) {
-  const head = o.cat === "プライオ・跳躍" ? (o.name || "プライオ") : o.cat + (o.name ? (o.cat === "補強" ? " " + o.name : "（" + o.name + "）") : "");
+function extraLine(o, cont) {
+  // 同じ種類が続くときは種類名（パワーマックス、ドリルなど）を省き、内容だけを書く
+  const head = cont ? o.name : o.cat === "プライオ・跳躍" ? (o.name || "プライオ") : o.cat + (o.name ? (o.cat === "補強" ? " " + o.name : "（" + o.name + "）") : "");
   const kp = o.cat === "パワーマックス" && o.kp ? " " + o.kp + "kp" : "";
   const amt = o.amt ? (o.sets && o.sets > 1 ? ` ${o.amt}×${o.sets}` : ` ${o.amt}`) : (o.sets && o.sets > 1 ? ` ×${o.sets}` : "");
   const watt = o.cat === "パワーマックス" && o.watt ? ` 最大${o.watt}W` : "";
-  return head + kp + amt + watt + (o.memo ? " " + o.memo : "");
+  return (head + kp + amt + watt + (o.memo ? " " + o.memo : "")).trim() || o.cat;
 }
 // 練習の流れ：ラン・ウエイト・その他を、保存された順番（order）で1列に並べる
 function flowItems(e) {
@@ -279,22 +281,41 @@ function flowItems(e) {
   return all.map((x, n) => ({ x, n })).sort((a, b) => pos(a.x.it.uid) - pos(b.x.it.uid) || a.n - b.n).map((a) => a.x);
 }
 function syncOrder(e) { e.order = flowItems(e).map((x) => x.it.uid); }
-function itemLine(x) { return x.t === "run" ? menuLine(x.it) : x.t === "w" ? weightLine(x.it) : extraLine(x.it); }
+function itemLine(x, cont) { return x.t === "run" ? menuLine(x.it, cont) : x.t === "w" ? weightLine(x.it, cont) : extraLine(x.it, cont); }
+// 「同じメニュー」の目印。これが前の行と同じなら、名前を省いて書く
+function groupKey(x) {
+  if (x.t === "run") return kindLabel(x.it) ? "r:" + kindLabel(x.it) : null;
+  if (x.t === "w") return "w:" + x.it.name;
+  if (x.it.cat === "プライオ・跳躍") return x.it.name ? "p:" + x.it.name : null;
+  return "o:" + x.it.cat;
+}
+// 並んだ項目を、同じメニューが続くところは名前を省いて文にする
+function joinLines(items) {
+  let prev = null;
+  return items.map((x) => {
+    const k = groupKey(x), cont = k != null && k === prev;
+    prev = k;
+    return itemLine(x, cont);
+  });
+}
 // 本文の行。アップの項目は最初のアップの位置に1行でまとめる
 function flowLines(e, forPost) {
   const items = flowItems(e);
   const ups = items.filter((x) => x.it.up);
   const out = [];
-  let upDone = false;
+  let upDone = false, prevKey = null;
   items.forEach((x) => {
     if (x.it.up) {
       if (upDone) return;
       upDone = true;
-      out.push(forPost && e.upMode !== "detail" ? "アップ" : "アップ（" + ups.map(itemLine).join("・") + "）");
+      out.push(forPost && e.upMode !== "detail" ? "アップ" : "アップ（" + joinLines(ups).join("・") + "）");
+      prevKey = null;
       return;
     }
     if (forPost && x.t === "o" && !x.it.post) return;
-    out.push(itemLine(x));
+    const k = groupKey(x), cont = k != null && k === prevKey;
+    prevKey = k;
+    out.push(itemLine(x, cont));
   });
   return out;
 }

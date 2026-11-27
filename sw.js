@@ -1,7 +1,7 @@
 "use strict";
 // アプリ本体だけをキャッシュしてオフラインでも開けるようにする。
 // 天気など外部への通信はキャッシュせず、そのままネットワークに流す。
-const CACHE = "sprint-log-v5";
+const CACHE = "sprint-log-v6";
 const ASSETS = ["./", "index.html", "style.css", "app.js", "table.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
