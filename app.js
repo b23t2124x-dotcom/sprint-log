@@ -147,8 +147,8 @@ const LINKS = ["10秒", "20秒", "30秒", "1分", "ウォーク20m", "ウォー�
 const RELAYS = ["4×100m", "4×400m", "その他"];
 const ROUNDS = ["予選", "準決勝", "決勝", "TR"];
 const RACE_EVENTS = ["60", "100", "200", "300", "400", "relay"];
-const OCATS = ["ジョグ", "ストレッチ", "ドリル", "補強", "プライオ・跳躍", "パワーマックス", "ケア"];
-const OCAT_POST_DEFAULT = { "ジョグ": false, "ストレッチ": false, "ケア": false, "ドリル": true, "補強": true, "プライオ・跳躍": true, "パワーマックス": true };
+const OCATS = ["ジョグ", "ストレッチ", "ドリル", "補強", "プライオ・跳躍", "パワーマックス", "ケア", "自由記入"];
+const OCAT_POST_DEFAULT = { "ジョグ": false, "ストレッチ": false, "ケア": false, "ドリル": true, "補強": true, "プライオ・跳躍": true, "パワーマックス": true, "自由記入": true };
 const PLYO = ["バウンディング", "ホッピング", "片脚ホップ", "立ち幅跳び", "立ち五段跳び", "ボックスジャンプ", "メディシンボール投げ", "その他"];
 const WEIGHT_EX = ["スクワット", "ハーフスクワット", "デッドリフト", "ベンチプレス", "クリーン", "スナッチ", "ランジ", "ヒップスラスト", "ステップアップ", "カーフレイズ", "懸垂", "その他"];
 
@@ -179,7 +179,7 @@ function sanitizeExtra(o) {
   const sets = numIn(o.sets, 1, 20);
   return {
     uid: uidOf(o.uid), up: o.up === true, cat: o.cat, name: str(o.name, 30), amt: str(o.amt, 20), sets: sets ? Math.round(sets) : null,
-    kp: str(o.kp, 6), watt: str(o.watt, 5), memo: str(o.memo, 60), post: typeof o.post === "boolean" ? o.post : OCAT_POST_DEFAULT[o.cat],
+    kp: str(o.kp, 6), watt: str(o.watt, 5), memo: str(o.memo, o.cat === "自由記入" ? 100 : 60), post: typeof o.post === "boolean" ? o.post : OCAT_POST_DEFAULT[o.cat],
   };
 }
 function sanitizeRace(x) {
@@ -267,6 +267,7 @@ function weightLine(g, cont) {
   return `${g.name}${kg ? " " + kg : ""}×${g.reps}×${g.sets}${g.note ? " " + g.note : ""}`;
 }
 function extraLine(o, cont) {
+  if (o.cat === "自由記入") return o.memo; // 種類なし：書いた文だけ
   // 同じ種類が続くときは種類名（パワーマックス、ドリルなど）を省き、内容だけを書く
   const head = cont ? o.name : o.cat === "プライオ・跳躍" ? (o.name || "プライオ") : o.cat + (o.name ? (o.cat === "補強" ? " " + o.name : "（" + o.name + "）") : "");
   const kp = o.cat === "パワーマックス" && o.kp ? " " + o.kp + "kp" : "";
@@ -287,6 +288,7 @@ function groupKey(x) {
   if (x.t === "run") return kindLabel(x.it) ? "r:" + kindLabel(x.it) : null;
   if (x.t === "w") return "w:" + x.it.name;
   if (x.it.cat === "プライオ・跳躍") return x.it.name ? "p:" + x.it.name : null;
+  if (x.it.cat === "自由記入") return null;
   return "o:" + x.it.cat;
 }
 // 並んだ項目を、同じメニューが続くところは名前を省いて文にする
@@ -629,6 +631,7 @@ const OCAT_UI = {
   "補強": { name: true, nameLabel: "種目（例：体幹、腹筋、背筋）", amt: true, amtLabel: "回数・時間", sets: true, chips: ["10回", "20回", "30回", "30秒", "1分"] },
   "プライオ・跳躍": { name: true, nameLabel: "種目", amt: true, amtLabel: "回数・距離", sets: true, chips: ["5回", "10回", "20回", "20m", "30m", "50m"] },
   "パワーマックス": { name: false, nameLabel: "", amt: true, amtLabel: "時間・回数", sets: true, pm: true, chips: ["5秒", "10秒", "20秒", "30秒", "60秒"] },
+  "自由記入": { name: false, nameLabel: "", amt: false, sets: false, free: true, chips: [] },
   "ケア": { name: true, nameLabel: "内容（任意。例：アイシング、マッサージ）", amt: false, sets: false, chips: [] },
 };
 function buildExtra() {
@@ -644,6 +647,7 @@ function buildExtra() {
     const ui = OCAT_UI[O.cat];
     const name = ui.name ? $("#oName").value.trim() : "";
     if (O.cat === "プライオ・跳躍" && !name) { toast("種目を選んでください"); return; }
+    if (ui.free && !$("#oMemo").value.trim()) { toast("書く内容を入れてください"); return; }
     const o = sanitizeExtra({ cat: O.cat, name, amt: ui.amt ? toHalf($("#oAmt").value).trim() : "", sets: ui.sets ? O.sets : null, memo: $("#oMemo").value.trim(), kp: ui.pm ? toHalf($("#oKp").value).trim() : "", watt: ui.pm ? toHalf($("#oWatt").value).trim() : "" });
     if (!o) return;
     F.extras.push(o); F.order.push(o.uid);
@@ -688,6 +692,10 @@ function syncExtraForm() {
   $("#oSetsWrap").hidden = !ui.sets;
   $("#oAmtRow").hidden = !ui.amt && !ui.sets;
   $("#oPmRow").hidden = !ui.pm;
+  // 自由記入はメモ欄だけを使う
+  $("#oMemoLabel").textContent = ui.free ? "書く内容（用意されていないメニューなど）" : "メモ（任意）";
+  $("#oMemo").maxLength = ui.free ? 100 : 60;
+  $("#oMemo").placeholder = ui.free ? "例：メディシンボール投げ上げ 10回×3、補強サーキット" : "例：回転重視、左脚に張り";
   $("#oAmtChips").innerHTML = chipsHTML(ui.chips, "", "num");
   $("#oName").value = O.cat === "プライオ・跳躍" ? (chipVal($("#oPlyo")) === "その他" ? "" : chipVal($("#oPlyo")) || "") : "";
   $("#oAmt").value = "";
