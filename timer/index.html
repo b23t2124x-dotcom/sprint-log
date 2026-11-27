@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0f1720">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="タイマー">
+<title>インターバルタイマー</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<link rel="icon" href="../icons/icon-192.png">
+<link rel="stylesheet" href="timer.css">
+</head>
+<body data-phase="idle">
+<header class="top">
+  <h1>インターバルタイマー</h1>
+  <a class="link" href="../">練習日誌へ</a>
+</header>
+
+<main>
+  <section class="clock" aria-live="polite">
+    <div class="phase" id="phase">準備OK</div>
+    <div class="time num" id="time">0:20</div>
+    <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+    <div class="meta">
+      <span id="round">ラウンド 0/8</span>
+      <span id="set">セット 1/1</span>
+    </div>
+    <div class="next" id="next">スタートを押すと、準備 10秒 から始まります</div>
+    <div class="total num" id="total">合計 4:10</div>
+  </section>
+
+  <div class="controls">
+    <button type="button" class="btn ghost" id="resetBtn">リセット</button>
+    <button type="button" class="btn go" id="startBtn">スタート</button>
+    <button type="button" class="btn ghost" id="skipBtn" disabled>次へ</button>
+  </div>
+
+  <section class="card" id="settings">
+    <h2>設定</h2>
+    <div class="chips" id="presets" role="group" aria-label="プリセット"></div>
+
+    <div class="grid">
+      <div class="field"><span>ワーク</span><div class="stepper"><button type="button" data-k="work" data-d="-5" aria-label="ワークを5秒減らす">−</button><input class="num" id="work" inputmode="numeric" maxlength="5" aria-label="ワーク（秒、または分:秒）"><button type="button" data-k="work" data-d="5" aria-label="ワークを5秒増やす">＋</button></div></div>
+      <div class="field"><span>レスト</span><div class="stepper"><button type="button" data-k="rest" data-d="-5" aria-label="レストを5秒減らす">−</button><input class="num" id="rest" inputmode="numeric" maxlength="5" aria-label="レスト（秒、または分:秒）"><button type="button" data-k="rest" data-d="5" aria-label="レストを5秒増やす">＋</button></div></div>
+      <div class="field"><span>ラウンド</span><div class="stepper"><button type="button" data-k="rounds" data-d="-1" aria-label="ラウンドを減らす">−</button><input class="num" id="rounds" inputmode="numeric" maxlength="3" aria-label="ラウンド数"><button type="button" data-k="rounds" data-d="1" aria-label="ラウンドを増やす">＋</button></div></div>
+      <div class="field"><span>セット</span><div class="stepper"><button type="button" data-k="sets" data-d="-1" aria-label="セットを減らす">−</button><input class="num" id="sets" inputmode="numeric" maxlength="2" aria-label="セット数"><button type="button" data-k="sets" data-d="1" aria-label="セットを増やす">＋</button></div></div>
+      <div class="field" id="setRestField"><span>セット間</span><div class="stepper"><button type="button" data-k="setRest" data-d="-15" aria-label="セット間を15秒減らす">−</button><input class="num" id="setRest" inputmode="numeric" maxlength="5" aria-label="セット間（秒、または分:秒）"><button type="button" data-k="setRest" data-d="15" aria-label="セット間を15秒増やす">＋</button></div></div>
+      <div class="field"><span>準備</span><div class="stepper"><button type="button" data-k="prep" data-d="-5" aria-label="準備を5秒減らす">−</button><input class="num" id="prep" inputmode="numeric" maxlength="5" aria-label="準備（秒）"><button type="button" data-k="prep" data-d="5" aria-label="準備を5秒増やす">＋</button></div></div>
+    </div>
+    <p class="hint">時間は秒（20）か、分:秒（1:30）で入れられます。各セットの最後のラウンドのあとは、レストなしで次へ進みます。</p>
+
+    <h3>音</h3>
+    <div class="chips" id="countdown" role="group" aria-label="カウントダウン音">
+      <button type="button" class="chip" data-v="0" aria-pressed="false">カウントダウンなし</button>
+      <button type="button" class="chip" data-v="3" aria-pressed="true">3秒前から</button>
+      <button type="button" class="chip" data-v="5" aria-pressed="false">5秒前から</button>
+    </div>
+    <label class="field">音量<input type="range" id="volume" min="0" max="100" value="80"></label>
+    <div class="row">
+      <button type="button" class="btn small" id="testBtn">音を試す</button>
+      <span class="hint">iPhoneはマナーモードでも鳴るように設定しています。鳴らないときは本体の音量を上げてください。</span>
+    </div>
+
+    <h3>プリセットとして保存</h3>
+    <div class="row">
+      <input id="presetName" maxlength="20" placeholder="例：パワマ 10秒×5" aria-label="プリセットの名前">
+      <button type="button" class="btn small" id="saveBtn">保存</button>
+    </div>
+    <div id="myPresets" class="list"></div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="timer.js"></script>
+</body>
+</html>
